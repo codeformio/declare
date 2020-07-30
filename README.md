@@ -61,3 +61,7 @@ Cleanup.
 ```sh
 ./hack/dev-down.sh
 ```
+
+## Related Projects
+
+- https://github.com/GoogleCloudPlatform/metacontroller
