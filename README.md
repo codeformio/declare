@@ -2,9 +2,35 @@
 
 Kubernetes tools that facilitate declarative resource management.
 
+## Quickstart
+
+```sh
+make install && make run
+```
+
+In another terminal, install a Controller from the library.
+
+```sh
+kubectl apply -f ./library/webapis/bundle.yaml
+```
+
+Install an instance of the new resource.
+
+```sh
+kubectl apply -f ./library/webapis/example/hello-api.yaml
+```
+
+List child resources.
+
+```sh
+kubectl get deployments
+kubectl get services
+kubectl get networkpolicies
+```
+
 ## Components
 
-### Controller
+### 1. Controller
 
 The Controller resource can be used to build Kubernetes operators using custom resources.
 
@@ -32,31 +58,6 @@ spec:
 
 [See WebAPI Controller](./library/webapis/controller.yaml)
 
-#### Quickstart
-
-```sh
-make install && make run
-```
-
-In another terminal, install a Controller from the library.
-
-```sh
-kubectl apply -f ./library/webapis/bundle.yaml
-```
-
-Install an instance of the new resource.
-
-```sh
-kubectl apply -f ./library/webapis/example/hello-api.yaml
-```
-
-List child resources.
-
-```sh
-kubectl get deployments
-kubectl get services
-kubectl get networkpolicies
-```
 
 ## Library Development
 
