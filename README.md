@@ -8,6 +8,8 @@ Kubernetes tools that facilitate declarative resource management.
 
 The Controller resource can be used to build Kubernetes operators using custom resources. This resource allows organizations to easily extend the Kubernetes API with abstractions for their teams with minimal code.
 
+[See Example](./library/webapis/controller.yaml)
+
 Supported languages:
 * [Jsonnet](https://jsonnet.org/)
 
