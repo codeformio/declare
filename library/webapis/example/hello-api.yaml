@@ -1,0 +1,10 @@
+apiVersion: apps.example.com/v1
+kind: WebAPI
+metadata:
+  name: hello
+spec:
+  port: 80
+  image: "nginx:1.14.2"
+  allowedClients:
+  - "hello-client-a"
+  - "hello-client-b"

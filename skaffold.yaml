@@ -1,0 +1,9 @@
+apiVersion: skaffold/v2beta5
+kind: Config
+metadata:
+  name: declare
+deploy:
+  kustomize:
+    paths:
+    - library/projects
+    - library/webapis

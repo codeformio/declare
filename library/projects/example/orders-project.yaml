@@ -1,0 +1,13 @@
+apiVersion: org.example.com/v1
+kind: Project
+metadata:
+  name: orders
+spec:
+  environments:
+  - dev
+  - stg
+  - feature-a
+  quota:
+    cpu: "1000"
+    memory: "1000"
+    pods: "100"

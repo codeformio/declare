@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: client-disallowed
+  labels:
+    app: some-not-allowed-app
+spec:
+  containers:
+  - name: main
+    image: ubuntu
+    command: ["/bin/sh"]
+    args: ["-c", "while true; do echo hello; sleep 10; done"]

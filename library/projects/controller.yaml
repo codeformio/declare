@@ -1,0 +1,46 @@
+apiVersion: ctrl.declare.dev/v1
+kind: Controller
+metadata:
+  name: projects
+spec:
+  crdName: projects.org.example.com
+  children:
+  - apiVersion: v1
+    kind: Namespace
+  - apiVersion: v1
+    kind: ResourceQuota
+  source:
+    controller.jsonnet: |
+      function(request) {
+
+        local obj = request.object,
+
+        children: [] + ( std.flattenArrays([
+          [
+            {
+              apiVersion: 'v1',
+              kind: 'Namespace',
+              metadata: {
+                name: obj.metadata.name + '-' + e,
+              }
+            },
+            {
+              apiVersion: 'v1',
+              kind: 'ResourceQuota',
+              metadata: {
+                name: 'team-quota',
+                namespace: obj.metadata.name + '-' + e
+              },
+              spec: {
+                hard: {
+                  cpu: obj.spec.quota.cpu,
+                  memory: obj.spec.quota.memory,
+                  pods: obj.spec.quota.pods
+                }
+              }
+            },
+          ] for e in obj.spec.environments ])
+        )
+      }
+  
+  

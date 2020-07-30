@@ -1,0 +1,51 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: webapis.apps.example.com
+spec:
+  group: apps.example.com
+  names:
+    kind: WebAPI
+    plural: webapis
+    shortNames:
+    - wa
+    - web
+    singular: webapi
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            properties:
+              allowedClients:
+                items:
+                  type: string
+                type: array
+              image:
+                type: string
+              port:
+                type: integer
+              public:
+                type: boolean
+            type: object
+        type: object
+    served: true
+    storage: true
+---
+apiVersion: ctrl.declare.dev/v1
+kind: Controller
+metadata:
+  name: webapis
+spec:
+  children:
+  - apiVersion: apps/v1
+    kind: Deployment
+  - apiVersion: v1
+    kind: Service
+  - apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+  crdName: webapis.apps.example.com
+  source:
+    controller.jsonnet: "function(request) {\n  local obj = request.object,\n  local isExposed = std.objectHas(obj.spec, 'public') && obj.spec.public == true,\n  local containerPort = if std.objectHas(obj.spec, 'port') && obj.spec.port != 0 then obj.spec.port else 8080,\n  children: [\n    {\n      apiVersion: 'apps/v1',\n      kind: 'Deployment',\n      metadata: {\n        name: obj.metadata.name,\n        labels: {\n          app: obj.metadata.name,\n        },\n      },\n      spec: {\n        replicas: 3,\n        selector: {\n          matchLabels: {\n            app: obj.metadata.name,\n          },\n        },\n        template: {\n          metadata: {\n            labels: {\n              app: obj.metadata.name,\n            },\n          },\n          spec: {\n            containers: [\n              {\n                name: 'nginx',\n                image: obj.spec.image,\n                ports: [\n                  {\n                    name: 'app',\n                    containerPort: containerPort,\n                    protocol: 'TCP',\n                  },\n                ],\n              },\n            ],\n          },\n        },\n      },\n    },\n\n    {\n      apiVersion: 'v1',\n      kind: 'Service',\n      metadata: {\n        name: obj.metadata.name,\n      },\n      spec: {\n        selector: {\n  \t      app: obj.metadata.name,\n        },\n        ports: [\n          {\n            targetPort: 'app',\n            # Clients should use standardized port.\n            port: 80,\n            protocol: 'TCP',\n          },\n        ],\n      },\n    },\n\n    {\n       apiVersion: 'networking.k8s.io/v1',\n       kind: 'NetworkPolicy',\n       metadata: {\n          name: obj.metadata.name + '-default-deny',\n       },\n       spec: {\n          podSelector: {\n             matchLabels: {\n                app: obj.metadata.name,\n             }\n          },\n          policyTypes: [\n             'Ingress',\n          ],\n       }\n    },\n\n  ] + (\n    if isExposed then [\n      {\n         apiVersion: \"networking.k8s.io/v1beta1\",\n         kind: \"Ingress\",\n         metadata: {\n            name: obj.metadata.name,\n            annotations: {\n               \"nginx.ingress.kubernetes.io/rewrite-target\": \"/\"\n            }\n         },\n         spec: {\n            rules: [\n               {\n                  http: {\n                     paths: [\n                        {\n                           path: \"/testpath\",\n                           pathType: \"Prefix\",\n                           backend: {\n                              serviceName: obj.metadata.name,\n                              servicePort: \"app\",\n                           },\n                        },\n                     ]\n                  },\n               },\n            ],\n         },\n      }\n\n    ] else []\n  ) + ( [\n    {\n       apiVersion: 'networking.k8s.io/v1',\n       kind: 'NetworkPolicy',\n       metadata: {\n          name: obj.metadata.name + '-allow-' + c,\n       },\n       spec: {\n          podSelector: {\n             matchLabels: {\n                app: obj.metadata.name,\n             }\n          },\n          policyTypes: [\n             'Ingress',\n          ],\n          ingress: [\n             {\n                from: [\n                   {\n                      podSelector: {\n                         matchLabels: {\n                            app: c,\n                         }\n                      }\n                   }\n                ],\n                ports: [\n                   {\n                      protocol: 'TCP',\n                      port: obj.spec.port\n                   }\n                ]\n             }\n          ]\n       }\n    } for c in obj.spec.allowedClients ]\n  )\n}\n"
