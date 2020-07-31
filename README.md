@@ -56,6 +56,7 @@ List child resources.
 kubectl get deployments
 kubectl get services
 kubectl get networkpolicies
+kubectl get ingress
 ```
 
 ## Library Development

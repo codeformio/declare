@@ -4,6 +4,7 @@ metadata:
   name: hello
 spec:
   port: 80
+  public: true
   image: "nginx:1.14.2"
   allowedClients:
   - "hello-client-a"
