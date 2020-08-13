@@ -4,7 +4,7 @@ Kubernetes tools that facilitate declarative resource management.
 
 ## Components
 
-### Controller
+### 1. Controller
 
 The Controller resource can be used to build Kubernetes operators using custom resources.
 
