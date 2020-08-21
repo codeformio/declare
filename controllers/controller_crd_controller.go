@@ -1,8 +1,10 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 
 	"github.com/codeformio/declare/template"
@@ -15,14 +17,22 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/json"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+)
+
+const (
+	AnnotationOwnershipKey = "ctrl.declare.dev/ownership"
+	// AnnotationOwnershipValueNone avoids setting any owner references.
+	AnnotationOwnershipValueNone = "none"
+	// AnnotationOwnershipValueNonController sets an owner reference without "controller: true".
+	AnnotationOwnershipValueNonController = "non-controller"
 )
 
 // ControllerCRDReconciler reconciles a CRD created by SiteDefinition with SiteDeployment objects.
@@ -99,6 +109,11 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	}
 
 	for _, child := range res.Children {
+		for _, specChild := range c.Spec.Children {
+			// TODO: Make sure child GVK exists in declared Children.
+			_ = specChild
+		}
+
 		// FYI: Creating unstructured object will fail without namespacing.
 		// TODO: For cluster scoped resources, check above to see if this can be avoided
 		// by avoiding setting the namespace in the Get for the CRD instance.
@@ -106,16 +121,51 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		if isNamespaced(child) && child.GetNamespace() == "" {
 			child.SetNamespace(c.Namespace)
 		}
-		if err := controllerutil.SetControllerReference(&parent, child, r.scheme); err != nil {
-			return ctrl.Result{}, fmt.Errorf("setting controller reference: %w", err)
+
+		// Allow for avoiding ownership references because it can interfere with some
+		// children (i.e. Cluster API resources that add owner references, some with
+		// "controller: true" and some without).
+		switch child.GetAnnotations()[AnnotationOwnershipKey] {
+		case AnnotationOwnershipValueNone:
+			// Avoid setting any owner references.
+		case AnnotationOwnershipValueNonController:
+			if err := controllerutil.SetOwnerReference(&parent, child, r.scheme); err != nil {
+				return ctrl.Result{}, fmt.Errorf("setting owner reference: %w", err)
+			}
+		default:
+			if err := controllerutil.SetControllerReference(&parent, child, r.scheme); err != nil {
+				return ctrl.Result{}, fmt.Errorf("setting controller reference: %w", err)
+			}
 		}
 
-		if err := r.client.Patch(ctx, child, client.Apply, client.ForceOwnership, client.FieldOwner(r.name())); err != nil {
-			return ctrl.Result{}, fmt.Errorf("patching (server-side apply): %w", err)
+		{ // TODO: Remove kubectl exec here once server-side apply works for all CRDs.
+
+			// NOTE: Server-side apply fails via kubectl as well as via the Go pkg call below.
+			// kubectl apply --force-conflicts=true --server-side
+
+			apply := exec.Command("kubectl", "apply", "--overwrite=true", "-f", "-")
+			var stdin, stderr bytes.Buffer
+			if err := json.NewEncoder(&stdin).Encode(child); err != nil {
+				return ctrl.Result{}, fmt.Errorf("encoding: %w", err)
+			}
+			apply.Stdin = &stdin
+			apply.Stderr = &stderr
+			if err := apply.Run(); err != nil {
+				return ctrl.Result{}, fmt.Errorf("patching (kubectl apply): %w: %v", err, stderr.String())
+			}
 		}
+
+		// TODO: Once server-side apply works, start using it over kubectl
+		// This currently fails for CAPI CRDs (MachineDeloyment .spec.replicas)
+		/*
+			if err := r.client.Patch(ctx, child, client.Apply, client.ForceOwnership, client.FieldOwner(r.name())); err != nil {
+				// problem, _ := json.Marshal(child)
+				return ctrl.Result{}, fmt.Errorf("patching (server-side apply): %w", err)
+			}
+		*/
 	}
 
-	// TODO: Account for deletions.
+	// TODO: Account for garbage collection of conditional resources.
 
 	return ctrl.Result{}, nil
 }
@@ -124,7 +174,7 @@ func isNamespaced(u *unstructured.Unstructured) bool {
 	kind := u.GetKind()
 
 	switch kind {
-	// TODO: Add more or find existing func
+	// TODO: Add more or find existing func.
 	case "Namespace":
 		return false
 	}
@@ -151,7 +201,10 @@ func (r *ControllerCRDReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.Log.Info("Starting watch for child", "gvk", gvk.String())
 		child := &unstructured.Unstructured{}
 		child.SetGroupVersionKind(gvk)
-		c.Owns(child)
+		// Using Watches here with "IsController: false" instead of c.Owns() because
+		// Owns sets IsController to true and that we do not always set "controller: true"
+		// on children.
+		c.Watches(&source.Kind{Type: child}, &handler.EnqueueRequestForOwner{OwnerType: parent, IsController: false})
 	}
 
 	// TODO: Is this the right way to watch the Controller?

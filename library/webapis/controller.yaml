@@ -27,7 +27,7 @@ spec:
             name: obj.metadata.name,
             labels: {
               app: obj.metadata.name,
-            },
+            }
           },
           spec: {
             replicas: 3,

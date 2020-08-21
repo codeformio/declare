@@ -22,3 +22,9 @@ bin
 *.swp
 *.swo
 *~
+
+*.kubeconfig
+kubeconfig
+.envrc
+
+scratch/

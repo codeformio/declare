@@ -1,7 +1,6 @@
 package jsonnet
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"strconv"
@@ -10,6 +9,8 @@ import (
 
 	"github.com/google/go-jsonnet"
 	"github.com/google/go-jsonnet/ast"
+
+	"k8s.io/apimachinery/pkg/util/json"
 )
 
 type Templater struct {

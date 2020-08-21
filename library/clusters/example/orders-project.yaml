@@ -1,0 +1,6 @@
+apiVersion: k8s.example.com/v1
+kind: Cluster
+metadata:
+  name: abc
+spec:
+  nodeCount: 3

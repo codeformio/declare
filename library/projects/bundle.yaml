@@ -9,7 +9,7 @@ spec:
     plural: projects
     shortNames:
     - prj
-    singular: projects
+    singular: project
   scope: Cluster
   versions:
   - name: v1

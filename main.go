@@ -70,8 +70,9 @@ func main() {
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
 		Port:               9443,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "d26717b8.declare.dev",
+		//	Logger:             zap.New(zap.Level(zapcore.DebugLevel), zap.UseDevMode(true)),
+		LeaderElection:   enableLeaderElection,
+		LeaderElectionID: "d26717b8.declare.dev",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
