@@ -79,10 +79,3 @@ else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
-.PHONY: library
-library:
-	for d in `ls ./library`; do \
-		echo bundling $$d; \
-		kustomize build ./library/$$d > ./library/$$d/bundle.yaml; \
-	done \
-

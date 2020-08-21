@@ -10,13 +10,13 @@ Setup your AWS credentials (this example will incur charges).
 Install Cluster controller.
 
 ```sh
-kubectl apply -f ./library/clusters/bundle.yaml
+kubectl apply -k ./library/clusters
 ```
 
 Install example instance of a cluster.
 
 ```sh
-kubectl apply -f ./library/clusters/example/
+kubectl apply -f ./library/clusters/example/abc-cluster.yaml
 ```
 
 ### Cleanup
@@ -24,5 +24,5 @@ kubectl apply -f ./library/clusters/example/
 Ensure you delete your cluster to prevent incurring long-term charges.
 
 ```sh
-kubectl delete -f ./library/clusters/example/
+kubectl delete -f ./library/clusters/example/abc-cluster.yaml
 ```

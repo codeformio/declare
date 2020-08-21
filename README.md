@@ -41,7 +41,7 @@ make install && make run
 In another terminal, install a Controller from the library.
 
 ```sh
-kubectl apply -f ./library/webapis/bundle.yaml
+kubectl apply -k ./library/webapis
 ```
 
 Install an instance of the new resource.
