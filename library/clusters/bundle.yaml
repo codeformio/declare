@@ -51,10 +51,6 @@ spec:
 
         local obj = request.object,
 
-        # TODO: Avoid becoming a controller owner of:
-        # AWSCluster
-        # KubeadmControlPlane
-
         local clu = {
           "apiVersion": "cluster.x-k8s.io/v1alpha3",
           "kind": "Cluster",
@@ -90,6 +86,7 @@ spec:
             "name": obj.metadata.name,
             "namespace": "default",
             "annotations": {
+              # CAPI Cluster will adopt this resource.
               "ctrl.declare.dev/ownership": "none",
             }
           },
@@ -106,6 +103,7 @@ spec:
             "name": obj.metadata.name + "-control-plane",
             "namespace": "default",
             "annotations": {
+              # CAPI Cluster will adopt this resource.
               "ctrl.declare.dev/ownership": "none",
             }
           },
@@ -157,6 +155,7 @@ spec:
             "name": obj.metadata.name + "-control-plane",
             "namespace": "default",
             "annotations": {
+              # CAPI Cluster will adopt this resource.
               "ctrl.declare.dev/ownership": "none",
             }
           },
@@ -178,6 +177,7 @@ spec:
             "name": obj.metadata.name + "-md-0",
             "namespace": "default",
             "annotations": {
+              # CAPI Cluster will adopt this resource.
               "ctrl.declare.dev/ownership": "none",
             }
           },
@@ -215,6 +215,7 @@ spec:
             "name": obj.metadata.name + "-md-0",
             "namespace": "default",
             "annotations": {
+              # CAPI Cluster will adopt this resource.
               "ctrl.declare.dev/ownership": "none",
             }
           },
@@ -236,6 +237,7 @@ spec:
             "name": obj.metadata.name + "-md-0",
             "namespace": "default",
             "annotations": {
+              # CAPI Cluster will adopt this resource.
               "ctrl.declare.dev/ownership": "none",
             }
           },
