@@ -1,39 +1,15 @@
 # Declare
 
-Kubernetes tools that facilitate declarative resource management.
+Declare facilitates declarative resource management by making it easy to define abstractions as Kubernetes-native objects.
 
+Supported languages:
+* [Jsonnet](https://jsonnet.org/)
 
-## Quickstart
+## Install
 
 ```sh
 kustomize build ./config/default | kubectl apply -f -
 ```
-
-Install the webapis Controller.
-
-```sh
-kubectl apply -k ./library/webapis
-```
-
-Install an instance of a WebAPI.
-
-```sh
-kubectl apply -f ./library/webapis/example/hello-api.yaml
-```
-
-List child resources.
-
-```sh
-kubectl get deployments
-kubectl get services
-kubectl get networkpolicies
-kubectl get ingress
-```
-
-The Controller resource can be used to build Kubernetes operators using custom resources.
-
-Supported languages:
-* [Jsonnet](https://jsonnet.org/)
 
 ## Library
 
@@ -54,7 +30,7 @@ spec:
   - "client-b"
 ```
 
-[See WebAPI Controller](./library/webapis/controller.yaml)
+See [WebAPI Controller](./library/webapis/controller.yaml)
 
 ### Project
 
