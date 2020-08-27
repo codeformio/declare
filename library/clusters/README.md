@@ -7,7 +7,6 @@ An abstraction around [Cluster API](https://github.com/kubernetes-sigs/cluster-a
 (Assumes you have Declare running in your cluster.)
 
 Follow the [Cluster API quickstart](https://cluster-api.sigs.k8s.io/user/quick-start.html) up until the point where you "Create your first workload cluster" (we will use our controller for this).
-Setup your AWS credentials (this example will incur charges).
 
 Install Cluster controller.
 
