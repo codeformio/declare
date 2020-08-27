@@ -2,20 +2,44 @@
 
 Kubernetes tools that facilitate declarative resource management.
 
-## Components
 
-### 1. Controller
+## Quickstart
+
+```sh
+kustomize build ./config/default | kubectl apply -f -
+```
+
+Install the webapis Controller.
+
+```sh
+kubectl apply -k ./library/webapis
+```
+
+Install an instance of a WebAPI.
+
+```sh
+kubectl apply -f ./library/webapis/example/hello-api.yaml
+```
+
+List child resources.
+
+```sh
+kubectl get deployments
+kubectl get services
+kubectl get networkpolicies
+kubectl get ingress
+```
 
 The Controller resource can be used to build Kubernetes operators using custom resources.
 
 Supported languages:
 * [Jsonnet](https://jsonnet.org/)
 
-#### Use Cases
+## Library
 
-##### Custom High Level Resources
+### WebAPI
 
-Controllers allow organizations to easily extend the Kubernetes API with abstractions for their teams:
+The WebAPI kinds allow app teams to easily specify deploy their application.
 
 ```yaml
 apiVersion: apps.example.com/v1
@@ -32,32 +56,15 @@ spec:
 
 [See WebAPI Controller](./library/webapis/controller.yaml)
 
-#### Quickstart
+### Project
 
-```sh
-make install && make run
-```
+A Project kind can be used to manage multiple Namespaces and related resources for teams.
 
-In another terminal, install a Controller from the library.
+### Cluster
 
-```sh
-kubectl apply -k ./library/webapis
-```
+The Cluster kind expands out into Cluster API resources to managed Kubernetes clusters.
 
-Install an instance of the new resource.
-
-```sh
-kubectl apply -f ./library/webapis/example/hello-api.yaml
-```
-
-List child resources.
-
-```sh
-kubectl get deployments
-kubectl get services
-kubectl get networkpolicies
-kubectl get ingress
-```
+See [Cluster quickstart guide](./library/clusters/).
 
 ## Library Development
 

@@ -50,11 +50,6 @@ type ControllerCRDReconciler struct {
 	scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=ctrl.declare.dev,resources=controllers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=ctrl.declare.dev,resources=controllers/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=,resources=services,verbs=get;list;watch;create;update;patch;delete
-
 func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues(strings.ToLower(r.GVK.Kind), req.NamespacedName)
