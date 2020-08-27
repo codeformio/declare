@@ -24,17 +24,19 @@ metadata:
   name: hello
 spec:
   port: 80
-  image: "nginx:1.14.2"
+  image: "my-app:v1.3.0"
   allowedClients:
   - "client-a"
   - "client-b"
 ```
 
-See [WebAPI Controller](./library/webapis/controller.yaml)
+See [WebAPI quickstart guide](./library/webapis/).
 
 ### Project
 
 A Project kind can be used to manage multiple Namespaces and related resources for teams.
+
+See [Project Controller](./library/projects/controller.yaml).
 
 ### Cluster
 
