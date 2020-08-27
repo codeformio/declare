@@ -15,7 +15,7 @@ kustomize build ./config/default | kubectl apply -f -
 
 ### WebAPI
 
-The WebAPI kinds allow app teams to easily specify deploy their application.
+A WebAPI allows app teams to easily deploy their application without much Kubernetes knowledge.
 
 ```yaml
 apiVersion: apps.example.com/v1
@@ -34,13 +34,13 @@ See [WebAPI quickstart guide](./library/webapis/).
 
 ### Project
 
-A Project kind can be used to manage multiple Namespaces and related resources for teams.
+A Project can be used to manage multiple Namespaces and related resources for teams.
 
 See [Project Controller](./library/projects/controller.yaml).
 
 ### Cluster
 
-The Cluster kind expands out into Cluster API resources to managed Kubernetes clusters.
+A Cluster provides a simple abstraction around Cluster API resources for managing Kubernetes clusters.
 
 See [Cluster quickstart guide](./library/clusters/).
 
