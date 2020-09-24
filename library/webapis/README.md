@@ -25,7 +25,7 @@ kubectl apply -f ./library/webapis/example/hello-api.yaml
 A Deployment should be created matching the name of the WebAPI.
 
 ```sh
-kubectl get deployments
+kubectl describe deployment hello
 ```
 
 #### Service
@@ -33,7 +33,7 @@ kubectl get deployments
 A Service should be created matching the name of the WebAPI.
 
 ```sh
-kubectl get services
+kubectl describe service hello
 ```
 
 #### Ingress
@@ -41,16 +41,14 @@ kubectl get services
 An Ingress should be created matching the name of the WebAPI (if `.spec.public = true`).
 
 ```sh
-kubectl get ingress
+kubectl describe ingress hello
 ```
 
 NOTE: Currently only the official k8s NGINX ingress controller is supported.
 
 #### Network Policies
 
-A network policy will be created that only allows traffic from Pods specified in the allowedClients list.
-
-A network policy should be created by the controller (it may take a second).
+A network policy will be created (it may take a second) that only allows traffic from Pods specified in the allowedClients list.
 
 ```sh
 kubectl describe networkpolicies hello
