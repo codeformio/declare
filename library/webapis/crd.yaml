@@ -29,7 +29,10 @@ spec:
                 allowedClients:
                   type: array
                   items:
-                    type: string
+                    type: object
+                    properties:
+                      app:
+                        type: string
   # either Namespaced or Cluster
   scope: Namespaced
   names:

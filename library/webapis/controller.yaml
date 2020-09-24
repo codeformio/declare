@@ -82,11 +82,20 @@ spec:
           },
         },
 
-        local defaultDenyNetworkPolicy = {
+        local isExposed = std.objectHas(obj.spec, 'public') && obj.spec.public == true,
+
+        local npPorts = [
+           {
+              protocol: 'TCP',
+              port: obj.spec.port
+           }
+        ],
+
+        local netpol = {
            apiVersion: 'networking.k8s.io/v1',
            kind: 'NetworkPolicy',
            metadata: {
-              name: obj.metadata.name + '-default-deny',
+              name: obj.metadata.name,
            },
            spec: {
               podSelector: {
@@ -97,6 +106,34 @@ spec:
               policyTypes: [
                  'Ingress',
               ],
+              ingress: [
+                 {
+                    from: [
+                       {
+                          podSelector: {
+                             matchLabels: {
+                                app: c.app,
+                             }
+                          }
+                       }
+                    ],
+                    ports: npPorts,
+                 }
+                 for c in obj.spec.allowedClients
+              ] + (if isExposed then [{
+                from: [
+                  {
+                    # Allow ingress from ingress controller.
+                    # TODO: Account for more ingress controllers.
+                    namespaceSelector: {
+                      matchLabels: {
+                        "app.kubernetes.io/name": "ingress-nginx",
+                      }
+                    }
+                  }
+                ],
+                ports: npPorts,
+              }] else []),
            },
         },
 
@@ -129,53 +166,11 @@ spec:
            },
         },
 
-        local allowNetworkPolicies = [
-          {
-             apiVersion: 'networking.k8s.io/v1',
-             kind: 'NetworkPolicy',
-             metadata: {
-                name: obj.metadata.name + '-allow-' + c,
-             },
-             spec: {
-                podSelector: {
-                   matchLabels: {
-                      app: obj.metadata.name,
-                   }
-                },
-                policyTypes: [
-                   'Ingress',
-                ],
-                ingress: [
-                   {
-                      from: [
-                         {
-                            podSelector: {
-                               matchLabels: {
-                                  app: c,
-                               }
-                            }
-                         }
-                      ],
-                      ports: [
-                         {
-                            protocol: 'TCP',
-                            port: obj.spec.port
-                         }
-                      ]
-                   }
-                ]
-             }
-          }
-          for c in obj.spec.allowedClients
-        ],
-
-        local isExposed = std.objectHas(obj.spec, 'public') && obj.spec.public == true,
-
         children: [
           deployment,
           service,
-          defaultDenyNetworkPolicy,
-        ] + allowNetworkPolicies + (if isExposed then [ingress] else [])
+          netpol,
+        ] + (if isExposed then [ingress] else [])
       }
   
   
