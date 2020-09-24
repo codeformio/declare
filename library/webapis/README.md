@@ -48,6 +48,8 @@ NOTE: Currently only the official k8s NGINX ingress controller is supported.
 
 #### Network Policies
 
+*NOTE: Requires a CNI with NetworkPolicy support.*
+
 A network policy will be created (it may take a second) that only allows traffic from Pods specified in the allowedClients list.
 
 ```sh
