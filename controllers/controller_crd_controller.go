@@ -165,6 +165,8 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 			}
 		}
 
+		log.Info("Applying child", "name", child.GetName(), "namespace", child.GetNamespace(), "gvk", child.GroupVersionKind())
+
 		{ // TODO: Remove kubectl exec here once server-side apply works for all CRDs.
 
 			// NOTE: Server-side apply fails via kubectl as well as via the Go pkg call below.
