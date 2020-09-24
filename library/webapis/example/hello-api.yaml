@@ -3,9 +3,14 @@ kind: WebAPI
 metadata:
   name: hello
 spec:
-  image: "nginx:1.14.2"
+  image: "k8s.gcr.io/hpa-example" # "nginx:1.14.2"
   port: 80
   public: true
   allowedClients:
   - app: "some-allowed-client"
   - app: "some-other-client"
+  resources:
+    min:
+      cpu: 400m
+    max:
+      cpu: 800m

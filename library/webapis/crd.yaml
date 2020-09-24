@@ -33,6 +33,19 @@ spec:
                     properties:
                       app:
                         type: string
+                resources:
+                  type: object
+                  properties:
+                    min:
+                      type: object
+                      properties:
+                        cpu:
+                          type: string
+                    max:
+                      type: object
+                      properties:
+                        cpu:
+                          type: string
   # either Namespaced or Cluster
   scope: Namespaced
   names:

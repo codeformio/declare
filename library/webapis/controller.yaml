@@ -20,6 +20,10 @@ spec:
 
         local containerPort = if std.objectHas(obj.spec, 'port') && obj.spec.port != 0 then obj.spec.port else 8080,
 
+
+        local minCPU = if std.objectHas(obj.spec, 'resources') && std.objectHas(obj.spec.resources, 'min') && std.objectHas(obj.spec.resources.min, 'cpu') then obj.spec.resources.min.cpu else "200m",
+        local maxCPU = if std.objectHas(obj.spec, 'resources') && std.objectHas(obj.spec.resources, 'max') && std.objectHas(obj.spec.resources.max, 'cpu') then obj.spec.resources.max.cpu else "500m",
+
         local deployment = {
           apiVersion: 'apps/v1',
           kind: 'Deployment',
@@ -30,7 +34,6 @@ spec:
             }
           },
           spec: {
-            replicas: 3,
             selector: {
               matchLabels: {
                 app: obj.metadata.name,
@@ -54,6 +57,14 @@ spec:
                         protocol: 'TCP',
                       },
                     ],
+                    resources: {
+                      requests: {
+                        cpu: minCPU,
+                      },
+                      limits: {
+                        cpu: maxCPU,
+                      },
+                    },
                   },
                 ],
               },
@@ -166,8 +177,28 @@ spec:
            },
         },
 
+        local hpa = {
+          apiVersion: "autoscaling/v1",
+          kind: "HorizontalPodAutoscaler",
+          metadata: {
+            name: obj.metadata.name,
+          },
+          spec: {
+            # TODO: Allow this to be configured?
+            maxReplicas: 10,
+            minReplicas: 1,
+            scaleTargetRef: {
+              apiVersion: "apps/v1",
+              kind: "Deployment",
+              name: obj.metadata.name,
+            },
+            targetCPUUtilizationPercentage: 50,
+          },
+        },
+
         children: [
           deployment,
+          hpa,
           service,
           netpol,
         ] + (if isExposed then [ingress] else [])
