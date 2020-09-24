@@ -13,13 +13,15 @@ spec:
     kind: NetworkPolicy
   - apiVersion: networking.k8s.io/v1beta1
     kind: Ingress
+  config:
+  - configMap: webapis
   source:
     controller.jsonnet: |
       function(request) {
         local obj = request.object,
+        local cfg = request.config,
 
         local containerPort = if std.objectHas(obj.spec, 'port') && obj.spec.port != 0 then obj.spec.port else 8080,
-
 
         local minCPU = if std.objectHas(obj.spec, 'resources') && std.objectHas(obj.spec.resources, 'min') && std.objectHas(obj.spec.resources.min, 'cpu') then obj.spec.resources.min.cpu else "200m",
         local maxCPU = if std.objectHas(obj.spec, 'resources') && std.objectHas(obj.spec.resources, 'max') && std.objectHas(obj.spec.resources.max, 'cpu') then obj.spec.resources.max.cpu else "500m",
@@ -177,6 +179,9 @@ spec:
            },
         },
 
+        local minReplicas = if std.objectHas(cfg, 'minReplicas') then std.parseInt(cfg.minReplicas) else 1,
+        local maxReplicas = if std.objectHas(cfg, 'maxReplicas') then std.parseInt(cfg.maxReplicas) else 10,
+
         local hpa = {
           apiVersion: "autoscaling/v1",
           kind: "HorizontalPodAutoscaler",
@@ -184,9 +189,8 @@ spec:
             name: obj.metadata.name,
           },
           spec: {
-            # TODO: Allow this to be configured?
-            maxReplicas: 10,
-            minReplicas: 1,
+            minReplicas: minReplicas,
+            maxReplicas: maxReplicas,
             scaleTargetRef: {
               apiVersion: "apps/v1",
               kind: "Deployment",

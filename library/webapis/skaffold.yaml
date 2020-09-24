@@ -1,0 +1,11 @@
+apiVersion: skaffold/v2beta5
+kind: Config
+metadata:
+  name: webapis
+deploy:
+  kustomize:
+    paths:
+    - .
+  kubectl:
+    manifests:
+    - example/hello-api.yaml

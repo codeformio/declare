@@ -6,6 +6,7 @@ import (
 
 type Input struct {
 	Object *unstructured.Unstructured `json:"object"`
+	Config map[string]string          `json:"config"`
 }
 
 type Output struct {

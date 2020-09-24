@@ -28,7 +28,7 @@ spec:
               apiVersion: 'v1',
               kind: 'ResourceQuota',
               metadata: {
-                name: 'team-quota',
+                name: 'project-quota',
                 namespace: obj.metadata.name + '-' + e
               },
               spec: {

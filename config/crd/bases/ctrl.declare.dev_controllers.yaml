@@ -42,6 +42,15 @@ spec:
                     type: string
                 type: object
               type: array
+            config:
+              items:
+                properties:
+                  configMap:
+                    type: string
+                  secret:
+                    type: string
+                type: object
+              type: array
             crdName:
               type: string
             source:
