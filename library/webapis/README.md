@@ -28,6 +28,18 @@ A Deployment should be created matching the name of the WebAPI.
 kubectl describe deployment hello
 ```
 
+#### Horizontal Pod Autoscaler
+
+*NOTE: The k8s metrics server must be installed on the cluster for autoscaling to work.*
+
+A Horizontal Pod Autoscaler should be created.
+
+```sh
+kubectl describe hpa hello
+```
+
+The HPA can take a long time to start adjusting pod counts.
+
 #### Service
 
 A Service should be created matching the name of the WebAPI.
@@ -38,13 +50,13 @@ kubectl describe service hello
 
 #### Ingress
 
+*NOTE: Currently only the official k8s NGINX ingress controller is supported.*
+
 An Ingress should be created matching the name of the WebAPI (if `.spec.public = true`).
 
 ```sh
 kubectl describe ingress hello
 ```
-
-NOTE: Currently only the official k8s NGINX ingress controller is supported.
 
 #### Network Policies
 
