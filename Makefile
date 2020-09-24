@@ -11,6 +11,8 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+LIBRARY ?= projects
+
 all: manager
 
 # Run tests
@@ -81,3 +83,5 @@ else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
+library-dev:
+	cd ./library/${LIBRARY} && skaffold dev

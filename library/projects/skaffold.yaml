@@ -1,9 +1,11 @@
 apiVersion: skaffold/v2beta5
 kind: Config
 metadata:
-  name: declare
+  name: projects
 deploy:
   kustomize:
     paths:
-    - library/projects
-    - library/webapis
+    - .
+  kubectl:
+    manifests:
+    - example/

@@ -13,6 +13,7 @@ import (
 	apiv1 "github.com/codeformio/declare/api/v1"
 
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -93,6 +94,37 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	// TODO: Remove hardcoded "default" namespace.
 	if err := r.regularClient.Get(ctx, types.NamespacedName{Name: r.ControllerName, Namespace: "default"}, &c); err != nil {
 		return ctrl.Result{}, fmt.Errorf("getting controller: %w", err)
+	}
+
+	// Add ownership to secrets and configmaps referenced.
+	for _, cfgSrc := range c.Spec.Config {
+		// TODO: Validate that only one source is defined per ConfigSource.
+		if name := cfgSrc.Secret; name != "" {
+			var s corev1.Secret
+			if err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: c.Namespace}, &s); err != nil {
+				log.Error(err, "error getting config secret")
+				continue
+			}
+			if err := controllerutil.SetOwnerReference(&c, &s, r.scheme); err != nil {
+				return ctrl.Result{}, fmt.Errorf("setting owner reference on secret: %w", err)
+			}
+			if err := r.client.Update(ctx, &s); err != nil {
+				return ctrl.Result{}, fmt.Errorf("updating config secret with owner reference: %v", err)
+			}
+		}
+		if name := cfgSrc.ConfigMap; name != "" {
+			var cm corev1.ConfigMap
+			if err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: c.Namespace}, &cm); err != nil {
+				log.Error(err, "error getting config configmap")
+				continue
+			}
+			if err := controllerutil.SetOwnerReference(&c, &cm, r.scheme); err != nil {
+				return ctrl.Result{}, fmt.Errorf("setting owner reference on configmap: %w", err)
+			}
+			if err := r.client.Update(ctx, &cm); err != nil {
+				return ctrl.Result{}, fmt.Errorf("updating config configmap with owner reference: %v", err)
+			}
+		}
 	}
 
 	tmpl := jsonnet.Templater{
@@ -190,6 +222,8 @@ func (r *ControllerCRDReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	c := ctrl.NewControllerManagedBy(mgr).
 		Named(r.name()).
+		Watches(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForOwner{OwnerType: parent, IsController: false}).
+		Watches(&source.Kind{Type: &corev1.ConfigMap{}}, &handler.EnqueueRequestForOwner{OwnerType: parent, IsController: false}).
 		For(parent)
 
 	for _, gvk := range r.ChildGVKs {
