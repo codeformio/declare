@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -96,13 +97,21 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		return ctrl.Result{}, fmt.Errorf("getting controller: %w", err)
 	}
 
+	cfg := make(map[string]string)
 	// Add ownership to secrets and configmaps referenced.
 	for _, cfgSrc := range c.Spec.Config {
+		lg := log.WithValues("namespace", c.Namespace)
 		// TODO: Validate that only one source is defined per ConfigSource.
 		if name := cfgSrc.Secret; name != "" {
+			lg := lg.WithValues("name", name)
+			lg.Info("Getting config Secret")
 			var s corev1.Secret
 			if err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: c.Namespace}, &s); err != nil {
-				log.Error(err, "error getting config secret")
+				if errors.IsNotFound(err) {
+					lg.Info("Config Secret not found")
+				} else {
+					log.Error(err, "Error getting config Secret")
+				}
 				continue
 			}
 			if err := controllerutil.SetOwnerReference(&c, &s, r.scheme); err != nil {
@@ -111,11 +120,20 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 			if err := r.client.Update(ctx, &s); err != nil {
 				return ctrl.Result{}, fmt.Errorf("updating config secret with owner reference: %v", err)
 			}
+			for k, v := range s.Data {
+				cfg[k] = string(v)
+			}
 		}
 		if name := cfgSrc.ConfigMap; name != "" {
+			lg := lg.WithValues("name", name)
+			lg.Info("Getting config ConfigMap")
 			var cm corev1.ConfigMap
 			if err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: c.Namespace}, &cm); err != nil {
-				log.Error(err, "error getting config configmap")
+				if errors.IsNotFound(err) {
+					lg.Info("Config ConfigMap not found")
+				} else {
+					log.Error(err, "Error getting config ConfigMap")
+				}
 				continue
 			}
 			if err := controllerutil.SetOwnerReference(&c, &cm, r.scheme); err != nil {
@@ -124,13 +142,16 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 			if err := r.client.Update(ctx, &cm); err != nil {
 				return ctrl.Result{}, fmt.Errorf("updating config configmap with owner reference: %v", err)
 			}
+			for k, v := range cm.Data {
+				cfg[k] = string(v)
+			}
 		}
 	}
 
 	tmpl := jsonnet.Templater{
 		Files: c.Spec.Source,
 	}
-	res, err := tmpl.Template(&template.Input{Object: &parent})
+	res, err := tmpl.Template(&template.Input{Object: &parent, Config: cfg})
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("templating: %w", err)
 	}
