@@ -26,8 +26,8 @@ spec:
   port: 80
   image: "my-app:v1.3.0"
   allowedClients:
-  - "client-a"
-  - "client-b"
+  - app: "client-a"
+  - app: "client-b"
 ```
 
 See [WebAPI quickstart guide](./library/webapis/).
