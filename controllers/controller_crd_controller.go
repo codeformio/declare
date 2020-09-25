@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -24,9 +25,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	"k8s.io/apimachinery/pkg/api/errors"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
@@ -97,6 +95,11 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		return ctrl.Result{}, fmt.Errorf("getting controller: %w", err)
 	}
 
+	children := make(map[schema.GroupVersionKind]bool)
+	for _, c := range c.Spec.Children {
+		children[schema.FromAPIVersionAndKind(c.APIVersion, c.Kind)] = true
+	}
+
 	cfg := make(map[string]string)
 	// Add ownership to secrets and configmaps referenced.
 	for _, cfgSrc := range c.Spec.Config {
@@ -107,7 +110,7 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 			lg.Info("Getting config Secret")
 			var s corev1.Secret
 			if err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: c.Namespace}, &s); err != nil {
-				if errors.IsNotFound(err) {
+				if apierrors.IsNotFound(err) {
 					lg.Info("Config Secret not found")
 				} else {
 					log.Error(err, "Error getting config Secret")
@@ -129,7 +132,7 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 			lg.Info("Getting config ConfigMap")
 			var cm corev1.ConfigMap
 			if err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: c.Namespace}, &cm); err != nil {
-				if errors.IsNotFound(err) {
+				if apierrors.IsNotFound(err) {
 					lg.Info("Config ConfigMap not found")
 				} else {
 					log.Error(err, "Error getting config ConfigMap")
@@ -157,9 +160,9 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	}
 
 	for _, child := range res.Children {
-		for _, specChild := range c.Spec.Children {
-			// TODO: Make sure child GVK exists in declared Children.
-			_ = specChild
+		if gvk := child.GroupVersionKind(); !children[gvk] {
+			log.Info("Blocking Controller from creating undeclared child (add child to Controller .spec.children to fix)", "apiVersion", child.GetAPIVersion(), "kind", child.GetKind())
+			continue
 		}
 
 		// FYI: Creating unstructured object will fail without namespacing.
