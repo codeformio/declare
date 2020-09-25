@@ -78,3 +78,14 @@ kubectl run busybox -l 'app=some-allowed-client' -i --image=busybox --restart=Ne
 kubectl run busybox -l 'app=some-unknown-client' -i --image=busybox --restart=Never --rm -- wget --timeout=2 'http://hello'
 ```
 
+## Config
+
+The WebAPI Controller can be configured using the following variables:
+
+```yaml
+  minRelicas: "1"
+  maxRelicas: "10"
+```
+
+See [./config.yaml](./config.yaml) for example.
+
