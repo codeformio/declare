@@ -7,23 +7,6 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// ControllerSpec defines the desired state of Controller
-type ControllerSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	Source  map[string]string `json:"source,omitempty"`
-	CRDName string            `json:"crdName,omitempty"`
-	// Type of children this app produces.
-	Children []ChildType `json:"children,omitempty"`
-}
-
-// ControllerStatus defines the observed state of Controller
-type ControllerStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-}
-
 // +kubebuilder:object:root=true
 
 // Controller is the Schema for the controllers API
@@ -35,9 +18,32 @@ type Controller struct {
 	Status ControllerStatus `json:"status,omitempty"`
 }
 
+// ControllerSpec defines the desired state of Controller
+type ControllerSpec struct {
+	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+	// Important: Run "make" to regenerate code after modifying this file
+
+	Source  map[string]string `json:"source,omitempty"`
+	CRDName string            `json:"crdName,omitempty"`
+	// Type of children this app produces.
+	Children []ChildType    `json:"children,omitempty"`
+	Config   []ConfigSource `json:"config,omitempty"`
+}
+
 type ChildType struct {
 	APIVersion string `json:"apiVersion,omitempty"`
 	Kind       string `json:"kind,omitempty"`
+}
+
+type ConfigSource struct {
+	Secret    string `json:"secret,omitempty"`
+	ConfigMap string `json:"configMap,omitempty"`
+}
+
+// ControllerStatus defines the observed state of Controller
+type ControllerStatus struct {
+	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
+	// Important: Run "make" to regenerate code after modifying this file
 }
 
 // +kubebuilder:object:root=true
