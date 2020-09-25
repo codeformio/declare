@@ -7,6 +7,8 @@ spec:
   children:
   - apiVersion: apps/v1
     kind: Deployment
+  - apiVersion: autoscaling/v1
+    kind: HorizontalPodAutoscaler
   - apiVersion: v1
     kind: Service
   - apiVersion: networking.k8s.io/v1
