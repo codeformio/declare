@@ -34,7 +34,6 @@ func Register(ctx context.Context, cl client.Client, mgr ctrl.Manager, stop chan
 	for _, c := range controllers {
 		r := ControllerCRDReconciler{
 			Log:            ctrl.Log.WithName("controllers").WithName(c.gvk.Kind + "Controller"),
-			regularClient:  cl,
 			ControllerName: c.name,
 			GVK:            c.gvk,
 			ChildGVKs:      c.childrenGVKs,

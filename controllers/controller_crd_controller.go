@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -43,9 +44,6 @@ type ControllerCRDReconciler struct {
 	GVK            schema.GroupVersionKind
 	ChildGVKs      []schema.GroupVersionKind
 
-	// TODO: Better way?
-	regularClient client.Client
-
 	client client.Client
 	scheme *runtime.Scheme
 }
@@ -56,42 +54,25 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 
 	log.Info("Received reconcile request", "name", req.NamespacedName)
 
-	// TODO: Update this placeholder logic.
-	if req.Name == r.ControllerName {
-		var list unstructured.UnstructuredList
-		list.SetGroupVersionKind(r.GVK)
-		if err := r.client.List(ctx, &list); err != nil {
-			return ctrl.Result{}, fmt.Errorf("listing controllers: %w", err)
-		}
-		for _, c := range list.Items {
-			log.Info("Rereconciling CRD after Controller change", "namespace", c.GetNamespace(), "name", c.GetName(), "apiVersion", c.GetAPIVersion(), "kind", c.GetKind())
-			_, err := r.Reconcile(ctrl.Request{NamespacedName: types.NamespacedName{
-				Namespace: c.GetNamespace(),
-				Name:      c.GetName(),
-			}})
-			if err != nil {
-				log.Error(err, "rereconciling CRD instances after Controller change")
-			}
-		}
-
-		return ctrl.Result{}, nil
-	}
-
+	// Get parent resource.
 	var parent unstructured.Unstructured
 	parent.SetGroupVersionKind(r.GVK)
 	if err := r.client.Get(ctx, req.NamespacedName, &parent); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
-		// Error reading the object - requeue the request.
 		return ctrl.Result{}, fmt.Errorf("getting parent: %w", err)
 	}
 
 	log.Info("Reconciling", "name", parent.GetName())
 
+	// Get Controller that corresponds to the parent resource.
 	var c apiv1.Controller
 	// TODO: Remove hardcoded "default" namespace.
-	if err := r.regularClient.Get(ctx, types.NamespacedName{Name: r.ControllerName, Namespace: "default"}, &c); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: r.ControllerName, Namespace: "default"}, &c); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("getting controller: %w", err)
 	}
 
@@ -101,7 +82,7 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	}
 
 	cfg := make(map[string]string)
-	// Add ownership to secrets and configmaps referenced.
+	// Add ownership to referenced configuration (Secrets/ConfigMaps).
 	for _, cfgSrc := range c.Spec.Config {
 		lg := log.WithValues("namespace", c.Namespace)
 		// TODO: Validate that only one source is defined per ConfigSource.
@@ -248,10 +229,9 @@ func (r *ControllerCRDReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	c := ctrl.NewControllerManagedBy(mgr).
 		Named(r.name()).
-		Watches(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForOwner{OwnerType: parent, IsController: false}).
-		Watches(&source.Kind{Type: &corev1.ConfigMap{}}, &handler.EnqueueRequestForOwner{OwnerType: parent, IsController: false}).
 		For(parent)
 
+	// Watch all children.
 	for _, gvk := range r.ChildGVKs {
 		r.Log.Info("Starting watch for child", "gvk", gvk.String())
 		child := &unstructured.Unstructured{}
@@ -262,8 +242,67 @@ func (r *ControllerCRDReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		c.Watches(&source.Kind{Type: child}, &handler.EnqueueRequestForOwner{OwnerType: parent, IsController: false})
 	}
 
-	// TODO: Is this the right way to watch the Controller?
-	c.Watches(&source.Kind{Type: &apiv1.Controller{}}, &handler.EnqueueRequestForObject{})
+	// Enqueue requests for all instances of this Controller when this
+	// Controller itself gets updated.
+	c.Watches(
+		&source.Kind{Type: &apiv1.Controller{}},
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: handler.ToRequestsFunc(r.enqueueSelfRequests)},
+	)
+
+	// Add watches in for Controller configurations (ConfigMaps & Secrets).
+	// NOTE: This appears to be additive in the case where a Controller also
+	// creates its own ConfigMap/Secret resources as children.
+	// These global configuration changes should trigger reconcile loops for
+	// each instance of this Controller.
+	c.Watches(
+		&source.Kind{Type: &corev1.Secret{}},
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: handler.ToRequestsFunc(r.enqueueConfigRequests)},
+	)
+	c.Watches(
+		&source.Kind{Type: &corev1.ConfigMap{}},
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: handler.ToRequestsFunc(r.enqueueConfigRequests)},
+	)
 
 	return c.Complete(r)
+}
+
+func (r *ControllerCRDReconciler) enqueueSelfRequests(a handler.MapObject) []reconcile.Request {
+	return r.listInstancesToReconcile()
+}
+
+func (r *ControllerCRDReconciler) enqueueConfigRequests(a handler.MapObject) []reconcile.Request {
+	var requests []reconcile.Request
+
+	ownRefs := a.Meta.GetOwnerReferences()
+	for _, ref := range ownRefs {
+		if ref.APIVersion == apiv1.GroupVersion.String() && ref.Kind == apiv1.ControllerKind {
+			requests = append(requests, r.listInstancesToReconcile()...)
+		}
+	}
+
+	return requests
+}
+
+func (r *ControllerCRDReconciler) listInstancesToReconcile() []reconcile.Request {
+	log := r.Log
+
+	var list unstructured.UnstructuredList
+	list.SetGroupVersionKind(r.GVK)
+	if err := r.client.List(context.Background(), &list); err != nil {
+		log.Error(err, "Listing instance of CRD")
+		return nil
+	}
+
+	var requests []reconcile.Request
+
+	for _, c := range list.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      c.GetName(),
+				Namespace: c.GetNamespace(),
+			},
+		})
+	}
+
+	return requests
 }
