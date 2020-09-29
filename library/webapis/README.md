@@ -18,6 +18,12 @@ Install an instance of a WebAPI.
 kubectl apply -f ./library/webapis/example/hello-api.yaml
 ```
 
+Query the status of the WebAPI. Note that the status of the underlying resources gets summarized here, maintaining a full abstraction.
+
+```sh
+kubectl get webapis
+```
+
 ### Child Resources
 
 #### Deployment

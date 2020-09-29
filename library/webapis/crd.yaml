@@ -13,10 +13,29 @@ spec:
       served: true
       # One and only one version must be marked as the storage version.
       storage: true
+      additionalPrinterColumns:
+        - name: Healthy
+          jsonPath: .status.healthy
+          type: boolean
+        - name: Replicas
+          jsonPath: .status.replicas
+          type: integer
+        - name: CPU (%)
+          jsonPath: .status.cpuUtilizationPercentage
+          type: integer
       schema:
         openAPIV3Schema:
           type: object
           properties:
+            status:
+              type: object
+              properties:
+                replicas:
+                  type: integer
+                healthy:
+                  type: boolean
+                cpuUtilizationPercentage:
+                  type: integer
             spec:
               type: object
               properties:
@@ -33,6 +52,11 @@ spec:
                     properties:
                       app:
                         type: string
+                healthcheck:
+                  type: object
+                  properties:
+                    path:
+                      type: string
                 resources:
                   type: object
                   properties:

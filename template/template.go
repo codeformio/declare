@@ -11,5 +11,6 @@ type Input struct {
 
 type Output struct {
 	Children []*unstructured.Unstructured `json:"children"`
-	// TODO: Should Object be here also to allow updating the App?
+	// TODO: Should Object be here also to allow updating the .spec?
+	Status map[string]interface{} `json:"status"`
 }

@@ -17,7 +17,7 @@ func TestTemplate(t *testing.T) {
 		},
 	}
 
-	out, err := tmpl.Template(&template.Input{
+	out, err := tmpl.Template(nil, &template.Input{
 		Object: &unstructured.Unstructured{
 			Object: map[string]interface{}{
 				"metadata": map[string]interface{}{

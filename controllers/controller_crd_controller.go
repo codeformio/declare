@@ -135,7 +135,7 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	tmpl := jsonnet.Templater{
 		Files: c.Spec.Source,
 	}
-	res, err := tmpl.Template(&template.Input{Object: &parent, Config: cfg})
+	res, err := tmpl.Template(r.client, &template.Input{Object: &parent, Config: cfg})
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("templating: %w", err)
 	}
@@ -197,6 +197,11 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				return ctrl.Result{}, fmt.Errorf("patching (server-side apply): %w", err)
 			}
 		*/
+	}
+
+	parent.Object["status"] = res.Status
+	if err := r.client.Update(ctx, &parent); err != nil {
+		return ctrl.Result{}, fmt.Errorf("updating parent status: %v", err)
 	}
 
 	// TODO: Account for garbage collection of conditional resources.
