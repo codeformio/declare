@@ -9,6 +9,8 @@ spec:
   allowedClients:
   - app: "some-allowed-client"
   - app: "some-other-client"
+  healthcheck:
+    path: /
   resources:
     min:
       cpu: 400m
