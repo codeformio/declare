@@ -44,29 +44,6 @@ A Cluster provides a simple abstraction around Cluster API resources for managin
 
 See [Cluster quickstart guide](./library/clusters/).
 
-## Library Development
-
-Tools:
-- [kind](https://kind.sigs.k8s.io/)
-- [kustomize](https://kustomize.io/)
-- [skaffold](https://skaffold.dev/)
-
-Start a dev environment.
-
-```sh
-./hack/dev-up.sh
-skaffold dev
-make run
-```
-
-... Hack on ./library ...
-
-Cleanup.
-
-```sh
-./hack/dev-down.sh
-```
-
 ## Related Projects
 
 - https://github.com/GoogleCloudPlatform/metacontroller
