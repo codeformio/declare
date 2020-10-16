@@ -134,7 +134,8 @@ spec:
                              matchLabels: {
                                 app: c.app,
                              }
-                          }
+                          },
+                          namespaceSelector: {},
                        }
                     ],
                     ports: npPorts,
