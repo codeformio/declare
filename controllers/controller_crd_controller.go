@@ -3,6 +3,7 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -34,6 +36,10 @@ const (
 	AnnotationOwnershipValueNone = "none"
 	// AnnotationOwnershipValueNonController sets an owner reference without "controller: true".
 	AnnotationOwnershipValueNonController = "non-controller"
+
+	EventReasonFailedTemplating = "FailedTemplating"
+	EventReasonFailedApplying   = "FailedApplying"
+	EventReasonApplied          = "Applied"
 )
 
 // ControllerCRDReconciler reconciles a CRD created by SiteDefinition with SiteDeployment objects.
@@ -44,8 +50,9 @@ type ControllerCRDReconciler struct {
 	GVK            schema.GroupVersionKind
 	ChildGVKs      []schema.GroupVersionKind
 
-	client client.Client
-	scheme *runtime.Scheme
+	recorder record.EventRecorder
+	client   client.Client
+	scheme   *runtime.Scheme
 }
 
 func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
@@ -137,12 +144,20 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	}
 	res, err := tmpl.Template(r.client, &template.Input{Object: &parent, Config: cfg})
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("templating: %w", err)
+		r.recorder.Event(&parent, corev1.EventTypeWarning, EventReasonFailedTemplating, err.Error())
+		log.Info("templating resulting in an error", "error", err.Error())
+		return ctrl.Result{}, nil
 	}
 
 	for _, child := range res.Children {
+		log := log.WithValues("kind", child.GetKind())
+		publishFailure := func(err error) {
+			r.recorder.Event(&parent, corev1.EventTypeWarning, EventReasonFailedApplying, err.Error())
+			log.Info("Applying child failed", "error", err.Error())
+		}
+
 		if gvk := child.GroupVersionKind(); !children[gvk] {
-			log.Info("Blocking Controller from creating undeclared child (add child to Controller .spec.children to fix)", "apiVersion", child.GetAPIVersion(), "kind", child.GetKind())
+			publishFailure(errors.New("child is not declared in Controller (.spec.children)"))
 			continue
 		}
 
@@ -162,11 +177,13 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 			// Avoid setting any owner references.
 		case AnnotationOwnershipValueNonController:
 			if err := controllerutil.SetOwnerReference(&parent, child, r.scheme); err != nil {
-				return ctrl.Result{}, fmt.Errorf("setting owner reference: %w", err)
+				log.Error(err, "Unable to set owner reference")
+				continue
 			}
 		default:
 			if err := controllerutil.SetControllerReference(&parent, child, r.scheme); err != nil {
-				return ctrl.Result{}, fmt.Errorf("setting controller reference: %w", err)
+				log.Error(err, "Unable to set controller reference")
+				continue
 			}
 		}
 
@@ -180,12 +197,14 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 			apply := exec.Command("kubectl", "apply", "--overwrite=true", "-f", "-")
 			var stdin, stderr bytes.Buffer
 			if err := json.NewEncoder(&stdin).Encode(child); err != nil {
-				return ctrl.Result{}, fmt.Errorf("encoding: %w", err)
+				publishFailure(fmt.Errorf("encoding: %w", err))
+				continue
 			}
 			apply.Stdin = &stdin
 			apply.Stderr = &stderr
 			if err := apply.Run(); err != nil {
-				return ctrl.Result{}, fmt.Errorf("patching (kubectl apply): %w: %v", err, stderr.String())
+				publishFailure(fmt.Errorf("patching (kubectl apply): %w: %v", err, stderr.String()))
+				continue
 			}
 		}
 
@@ -197,6 +216,9 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				return ctrl.Result{}, fmt.Errorf("patching (server-side apply): %w", err)
 			}
 		*/
+
+		r.recorder.Eventf(&parent, corev1.EventTypeNormal, EventReasonApplied, "Successfully applied child %s: %s", child.GetKind(), child.GetName())
+		log.Info("Applied child")
 	}
 
 	parent.Object["status"] = res.Status
@@ -231,6 +253,7 @@ func (r *ControllerCRDReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	r.client = mgr.GetClient()
 	r.scheme = mgr.GetScheme()
+	r.recorder = mgr.GetEventRecorderFor(r.ControllerName)
 
 	c := ctrl.NewControllerManagedBy(mgr).
 		Named(r.name()).
