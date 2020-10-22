@@ -24,6 +24,12 @@ Query the status of the WebAPI. Note that the status of the underlying resources
 kubectl get webapis
 ```
 
+Information about the creation of child resources and any errors in the Controller logic will be exposed as events which can be inspected:
+
+```sh
+kubectl describe webapis
+```
+
 ### Child Resources
 
 #### Deployment
