@@ -1,0 +1,47 @@
+apiVersion: ctrl.declare.dev/v1
+kind: Controller
+metadata:
+  name: jsexamples
+spec:
+  crdName: jsexamples.javascript.example.com
+  children:
+  - apiVersion: v1
+    kind: Service
+  source:
+    controller.js: |
+      function sync(request) {
+        var obj = request.object;
+        var isExposed = hasDefinedPort(obj);
+      
+        var children = [];
+      
+        if (isExposed) {
+          children.push({
+            apiVersion: 'v1',
+            kind: 'Service',
+            metadata: {
+              name: obj.metadata.name,
+            },
+            spec: {
+              selector: {
+        	      app: obj.metadata.name,
+        	    },
+              ports: [
+                {
+                  protocol: 'TCP',
+                  port: obj.spec.port,
+                  targetPort: obj.spec.port,
+                },
+              ],
+            },
+          })
+        }
+      
+        return { children: children };
+      }
+
+    utils.js: |
+      function hasDefinedPort(obj) {
+        return obj.spec.hasOwnProperty('port') && obj.spec.port > 0;
+      }
+

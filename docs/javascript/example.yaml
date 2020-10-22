@@ -1,0 +1,6 @@
+apiVersion: javascript.example.com/v1
+kind: JSExample
+metadata:
+  name: abc
+spec:
+  port: 3000

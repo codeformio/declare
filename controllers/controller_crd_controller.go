@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/codeformio/declare/template"
-	"github.com/codeformio/declare/template/jsonnet"
+	templatefactory "github.com/codeformio/declare/template/factory"
 
 	apiv1 "github.com/codeformio/declare/api/v1"
 
@@ -139,9 +139,13 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		}
 	}
 
-	tmpl := jsonnet.Templater{
-		Files: c.Spec.Source,
+	tmpl, err := templatefactory.New(c.Spec.Source)
+	if err != nil {
+		r.recorder.Event(&parent, corev1.EventTypeWarning, EventReasonFailedTemplating, "Invalid source: "+err.Error())
+		log.Info("detecting source language", "error", err.Error())
+		return ctrl.Result{}, nil
 	}
+
 	res, err := tmpl.Template(r.client, &template.Input{Object: &parent, Config: cfg})
 	if err != nil {
 		r.recorder.Event(&parent, corev1.EventTypeWarning, EventReasonFailedTemplating, err.Error())

@@ -3,7 +3,8 @@
 Declare facilitates declarative resource management by making it easy to define abstractions as Kubernetes-native objects.
 
 Supported languages:
-* [Jsonnet](https://jsonnet.org/)
+* [Javascript](./docs/javascript)
+* [Jsonnet](./docs/jsonnet)
 
 ## Install
 
