@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 
 	"github.com/codeformio/declare/template"
@@ -41,8 +40,7 @@ func (t *Templater) Template(c client.Reader, input *template.Input) (*template.
 	for filename, source := range t.Files {
 		jsonOutput, err := vm.EvaluateSnippet(filename, source)
 		if err != nil {
-			log.Printf("/%s input: %s", filename, jsonInput)
-			log.Fatalf("/%s error: %s", filename, err)
+			return nil, err
 		}
 
 		if err := json.Unmarshal([]byte(jsonOutput), &output); err != nil {
