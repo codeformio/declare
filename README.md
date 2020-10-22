@@ -1,5 +1,7 @@
 # Declare
 
+*Disclaimer: Still unstable, reach out in you are looking to use this project in production and we can get a stable version out there soon.*
+
 Declare facilitates declarative resource management by making it easy to define abstractions as Kubernetes-native objects.
 
 Supported languages:
