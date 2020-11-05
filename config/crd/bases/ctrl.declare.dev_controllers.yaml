@@ -32,16 +32,6 @@ spec:
         spec:
           description: ControllerSpec defines the desired state of Controller
           properties:
-            children:
-              description: Type of children this app produces.
-              items:
-                properties:
-                  apiVersion:
-                    type: string
-                  kind:
-                    type: string
-                type: object
-              type: array
             config:
               items:
                 properties:
@@ -51,8 +41,24 @@ spec:
                     type: string
                 type: object
               type: array
-            crdName:
-              type: string
+            dependencies:
+              items:
+                properties:
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  optional:
+                    type: boolean
+                type: object
+              type: array
+            for:
+              properties:
+                apiVersion:
+                  type: string
+                kind:
+                  type: string
+              type: object
             source:
               additionalProperties:
                 type: string

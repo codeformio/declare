@@ -31,8 +31,8 @@ func TestTemplate(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	require.Len(t, out.Children, 1)
-	require.Equal(t, "my-name", out.Children[0].GetName())
+	require.Len(t, out.Apply, 1)
+	require.Equal(t, "my-name", out.Apply[0].GetName())
 
 	// json.NewEncoder(os.Stdout).Encode(out)
 }

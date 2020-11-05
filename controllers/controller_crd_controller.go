@@ -3,7 +3,6 @@ package controllers
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -46,9 +45,7 @@ const (
 type ControllerCRDReconciler struct {
 	Log logr.Logger
 
-	ControllerName string
-	GVK            schema.GroupVersionKind
-	ChildGVKs      []schema.GroupVersionKind
+	controllerInfo
 
 	recorder record.EventRecorder
 	client   client.Client
@@ -57,35 +54,35 @@ type ControllerCRDReconciler struct {
 
 func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
-	log := r.Log.WithValues(strings.ToLower(r.GVK.Kind), req.NamespacedName)
+	log := r.Log.WithValues(strings.ToLower(r.mainType.Kind), req.NamespacedName)
 
 	log.Info("Received reconcile request", "name", req.NamespacedName)
 
-	// Get parent resource.
-	var parent unstructured.Unstructured
-	parent.SetGroupVersionKind(r.GVK)
-	if err := r.client.Get(ctx, req.NamespacedName, &parent); err != nil {
+	// Get main resource.
+	var main unstructured.Unstructured
+	main.SetGroupVersionKind(r.mainType)
+	if err := r.client.Get(ctx, req.NamespacedName, &main); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("getting parent: %w", err)
+		return ctrl.Result{}, fmt.Errorf("getting main resource: %w", err)
 	}
 
-	log.Info("Reconciling", "name", parent.GetName())
+	log.Info("Reconciling", "name", main.GetName())
 
-	// Get Controller that corresponds to the parent resource.
+	// Get Controller that corresponds to the main resource.
 	var c apiv1.Controller
 	// TODO: Remove hardcoded "default" namespace.
-	if err := r.client.Get(ctx, types.NamespacedName{Name: r.ControllerName, Namespace: "default"}, &c); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: r.controllerName, Namespace: "default"}, &c); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("getting controller: %w", err)
 	}
 
-	children := make(map[schema.GroupVersionKind]bool)
-	for _, c := range c.Spec.Children {
-		children[schema.FromAPIVersionAndKind(c.APIVersion, c.Kind)] = true
+	dependencies := make(map[schema.GroupVersionKind]bool)
+	for _, c := range c.Spec.Dependencies {
+		dependencies[schema.FromAPIVersionAndKind(c.APIVersion, c.Kind)] = true
 	}
 
 	cfg := make(map[string]string)
@@ -141,27 +138,28 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 
 	tmpl, err := templatefactory.New(c.Spec.Source)
 	if err != nil {
-		r.recorder.Event(&parent, corev1.EventTypeWarning, EventReasonFailedTemplating, "Invalid source: "+err.Error())
+		r.recorder.Event(&main, corev1.EventTypeWarning, EventReasonFailedTemplating, "Invalid source: "+err.Error())
 		log.Info("detecting source language", "error", err.Error())
 		return ctrl.Result{}, nil
 	}
 
-	res, err := tmpl.Template(r.client, &template.Input{Object: &parent, Config: cfg})
+	res, err := tmpl.Template(r.client, &template.Input{Object: &main, Config: cfg, Supported: r.supportedDependencies})
 	if err != nil {
-		r.recorder.Event(&parent, corev1.EventTypeWarning, EventReasonFailedTemplating, err.Error())
+		r.recorder.Event(&main, corev1.EventTypeWarning, EventReasonFailedTemplating, err.Error())
 		log.Info("templating resulting in an error", "error", err.Error())
 		return ctrl.Result{}, nil
 	}
 
-	for _, child := range res.Children {
-		log := log.WithValues("kind", child.GetKind())
+	for _, obj := range res.Apply {
+		log := log.WithValues("kind", obj.GetKind())
 		publishFailure := func(err error) {
-			r.recorder.Event(&parent, corev1.EventTypeWarning, EventReasonFailedApplying, err.Error())
-			log.Info("Applying child failed", "error", err.Error())
+			r.recorder.Event(&main, corev1.EventTypeWarning, EventReasonFailedApplying, err.Error())
+			log.Info("Apply failed", "error", err.Error())
 		}
 
-		if gvk := child.GroupVersionKind(); !children[gvk] {
-			publishFailure(errors.New("child is not declared in Controller (.spec.children)"))
+		if gvk := obj.GroupVersionKind(); !dependencies[gvk] {
+			apiV, kind := gvk.ToAPIVersionAndKind()
+			publishFailure(fmt.Errorf("dependency is not declared in Controller (.spec.dependencies): apiVersion: %s kind: %s", apiV, kind))
 			continue
 		}
 
@@ -169,29 +167,29 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		// TODO: For cluster scoped resources, check above to see if this can be avoided
 		// by avoiding setting the namespace in the Get for the CRD instance.
 		// NOTE: If the namespace is specified, do not override it.
-		if isNamespaced(child) && child.GetNamespace() == "" {
-			child.SetNamespace(c.Namespace)
+		if isNamespaced(obj) && obj.GetNamespace() == "" {
+			obj.SetNamespace(c.Namespace)
 		}
 
 		// Allow for avoiding ownership references because it can interfere with some
-		// children (i.e. Cluster API resources that add owner references, some with
+		// objects (i.e. Cluster API resources that add owner references, some with
 		// "controller: true" and some without).
-		switch child.GetAnnotations()[AnnotationOwnershipKey] {
+		switch obj.GetAnnotations()[AnnotationOwnershipKey] {
 		case AnnotationOwnershipValueNone:
 			// Avoid setting any owner references.
 		case AnnotationOwnershipValueNonController:
-			if err := controllerutil.SetOwnerReference(&parent, child, r.scheme); err != nil {
+			if err := controllerutil.SetOwnerReference(&main, obj, r.scheme); err != nil {
 				log.Error(err, "Unable to set owner reference")
 				continue
 			}
 		default:
-			if err := controllerutil.SetControllerReference(&parent, child, r.scheme); err != nil {
+			if err := controllerutil.SetControllerReference(&main, obj, r.scheme); err != nil {
 				log.Error(err, "Unable to set controller reference")
 				continue
 			}
 		}
 
-		log.Info("Applying child", "name", child.GetName(), "namespace", child.GetNamespace(), "gvk", child.GroupVersionKind())
+		log.Info("Applying", "name", obj.GetName(), "namespace", obj.GetNamespace(), "gvk", obj.GroupVersionKind())
 
 		{ // TODO: Remove kubectl exec here once server-side apply works for all CRDs.
 
@@ -200,7 +198,7 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 
 			apply := exec.Command("kubectl", "apply", "--overwrite=true", "-f", "-")
 			var stdin, stderr bytes.Buffer
-			if err := json.NewEncoder(&stdin).Encode(child); err != nil {
+			if err := json.NewEncoder(&stdin).Encode(obj); err != nil {
 				publishFailure(fmt.Errorf("encoding: %w", err))
 				continue
 			}
@@ -215,19 +213,19 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		// TODO: Once server-side apply works, start using it over kubectl
 		// This currently fails for CAPI CRDs (MachineDeloyment .spec.replicas)
 		/*
-			if err := r.client.Patch(ctx, child, client.Apply, client.ForceOwnership, client.FieldOwner(r.name())); err != nil {
-				// problem, _ := json.Marshal(child)
+			if err := r.client.Patch(ctx, obj, client.Apply, client.ForceOwnership, client.FieldOwner(r.name())); err != nil {
+				// problem, _ := json.Marshal(obj)
 				return ctrl.Result{}, fmt.Errorf("patching (server-side apply): %w", err)
 			}
 		*/
 
-		r.recorder.Eventf(&parent, corev1.EventTypeNormal, EventReasonApplied, "Successfully applied child %s: %s", child.GetKind(), child.GetName())
-		log.Info("Applied child")
+		r.recorder.Eventf(&main, corev1.EventTypeNormal, EventReasonApplied, "Successfully applied object %s: %s", obj.GetKind(), obj.GetName())
+		log.Info("Applied object")
 	}
 
-	parent.Object["status"] = res.Status
-	if err := r.client.Update(ctx, &parent); err != nil {
-		return ctrl.Result{}, fmt.Errorf("updating parent status: %v", err)
+	main.Object["status"] = res.Status
+	if err := r.client.Update(ctx, &main); err != nil {
+		return ctrl.Result{}, fmt.Errorf("updating main status: %v", err)
 	}
 
 	// TODO: Account for garbage collection of conditional resources.
@@ -248,30 +246,34 @@ func isNamespaced(u *unstructured.Unstructured) bool {
 }
 
 func (r *ControllerCRDReconciler) name() string {
-	return strings.ToLower(r.GVK.Kind) + "_controller"
+	return strings.ToLower(r.mainType.Kind) + "_controller"
 }
 
 func (r *ControllerCRDReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	parent := &unstructured.Unstructured{}
-	parent.SetGroupVersionKind(r.GVK)
+	main := &unstructured.Unstructured{}
+	main.SetGroupVersionKind(r.mainType)
 
 	r.client = mgr.GetClient()
 	r.scheme = mgr.GetScheme()
-	r.recorder = mgr.GetEventRecorderFor(r.ControllerName)
+	r.recorder = mgr.GetEventRecorderFor(r.controllerName)
 
 	c := ctrl.NewControllerManagedBy(mgr).
 		Named(r.name()).
-		For(parent)
+		For(main)
 
-	// Watch all children.
-	for _, gvk := range r.ChildGVKs {
-		r.Log.Info("Starting watch for child", "gvk", gvk.String())
-		child := &unstructured.Unstructured{}
-		child.SetGroupVersionKind(gvk)
+	// Watch all dependents.
+	for _, gvk := range r.dependentTypes {
+		if !r.supportedDependencies[supportedDependencyKey(gvk)] {
+			r.Log.Info("Skipping watch for unsupported dependent", "gvk", gvk.String())
+			continue
+		}
+		r.Log.Info("Starting watch for dependent", "gvk", gvk.String())
+		dependent := &unstructured.Unstructured{}
+		dependent.SetGroupVersionKind(gvk)
 		// Using Watches here with "IsController: false" instead of c.Owns() because
 		// Owns sets IsController to true and that we do not always set "controller: true"
-		// on children.
-		c.Watches(&source.Kind{Type: child}, &handler.EnqueueRequestForOwner{OwnerType: parent, IsController: false})
+		// on dependent.
+		c.Watches(&source.Kind{Type: dependent}, &handler.EnqueueRequestForOwner{OwnerType: main, IsController: false})
 	}
 
 	// Enqueue requests for all instances of this Controller when this
@@ -283,7 +285,7 @@ func (r *ControllerCRDReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// Add watches in for Controller configurations (ConfigMaps & Secrets).
 	// NOTE: This appears to be additive in the case where a Controller also
-	// creates its own ConfigMap/Secret resources as children.
+	// creates its own ConfigMap/Secret resources as dependents.
 	// These global configuration changes should trigger reconcile loops for
 	// each instance of this Controller.
 	c.Watches(
@@ -319,7 +321,7 @@ func (r *ControllerCRDReconciler) listInstancesToReconcile() []reconcile.Request
 	log := r.Log
 
 	var list unstructured.UnstructuredList
-	list.SetGroupVersionKind(r.GVK)
+	list.SetGroupVersionKind(r.mainType)
 	if err := r.client.List(context.Background(), &list); err != nil {
 		log.Error(err, "Listing instance of CRD")
 		return nil

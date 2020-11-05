@@ -7,7 +7,17 @@ spec:
   - dev
   - stg
   - feature-a
-  quota:
-    cpu: "1000"
-    memory: "1000"
-    pods: "100"
+  access:
+    view:
+    - group: orders-devs
+    edit:
+    - group: orders-admins-us
+    - group: orders-admins-apj
+  resources:
+    envTotals:
+      requests: { cpu: "1", memory: "2", pods: "100" }
+      limits:   { cpu: "1", memory: "2", pods: "100" }
+    podDefaults:
+      requests: { cpu: "1",  memory: "2"  }
+      limits:   { cpu: "10", memory: "20" }
+

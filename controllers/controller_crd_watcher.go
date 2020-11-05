@@ -2,13 +2,12 @@ package controllers
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-logr/logr"
-	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 
 	apiv1 "github.com/codeformio/declare/api/v1"
 
@@ -22,7 +21,7 @@ type ControllerReconciler struct {
 	Log     logr.Logger
 	Restart chan struct{}
 
-	Registry map[schema.GroupVersionKind]bool
+	ControllerRegistry map[string]bool
 
 	client client.Client
 	scheme *runtime.Scheme
@@ -31,30 +30,28 @@ type ControllerReconciler struct {
 func (r *ControllerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 
-	app := &apiv1.Controller{}
-	err := r.client.Get(ctx, req.NamespacedName, app)
+	con := &apiv1.Controller{}
+	err := r.client.Get(ctx, req.NamespacedName, con)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
+			r.Log.Info("previous controller no longer exists, triggering restart")
+			close(r.Restart)
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
 		return ctrl.Result{}, err
 	}
 
-	// Ensure CRD exists before starting controllers for it.
-	crd := &apiext.CustomResourceDefinition{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: app.Spec.CRDName}, crd); err != nil {
-		if apierrors.IsNotFound(err) {
-			return ctrl.Result{Requeue: true}, nil
-		}
-		return ctrl.Result{}, err
+	// Ensure parent resource type exists before starting controllers for it.
+	parentGVK := schema.FromAPIVersionAndKind(con.Spec.For.APIVersion, con.Spec.For.Kind)
+	if err := resourceTypeExists(ctx, r.client, parentGVK); err != nil {
+		delay := 10 * time.Second
+		r.Log.Error(err, "found controller but unable to find parent resource type, checking again after delay", "delay", delay)
+		return ctrl.Result{RequeueAfter: delay}, nil
 	}
 
-	if _, ok := r.Registry[schema.GroupVersionKind{
-		Group:   crd.Spec.Group,
-		Version: crd.Spec.Version,
-		Kind:    crd.Spec.Names.Kind,
-	}]; !ok {
+	if _, ok := r.ControllerRegistry[con.Name]; !ok {
+		r.Log.Info("found unregistered controller, triggering restart")
 		close(r.Restart)
 	}
 
@@ -66,6 +63,6 @@ func (r *ControllerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.scheme = mgr.GetScheme()
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.Controller{}).
-		Named("app").
+		Named("watcher").
 		Complete(r)
 }
