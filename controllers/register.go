@@ -3,84 +3,104 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	apiv1 "github.com/codeformio/declare/api/v1"
-	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func Register(ctx context.Context, cl client.Client, mgr ctrl.Manager, stop chan struct{}) error {
-	controllers, err := getParentChildrenGVKs(ctx, cl)
+	controllers, err := getControllers(ctx, cl)
 	if err != nil {
-		return fmt.Errorf("getting children GVKs: %w", err)
+		return fmt.Errorf("getting controllers: %w", err)
 	}
 
-	crdMap := map[schema.GroupVersionKind]bool{}
+	controllerNames := map[string]bool{}
 	for _, c := range controllers {
-		crdMap[c.gvk] = true
+		controllerNames[c.controllerName] = true
 	}
 
 	if err := (&ControllerReconciler{
-		Log:      ctrl.Log.WithName("controllers").WithName("ControllerCRD"),
-		Restart:  stop,
-		Registry: crdMap,
+		Log:                ctrl.Log.WithName("controllers").WithName("ControllerCRD"),
+		Restart:            stop,
+		ControllerRegistry: controllerNames,
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("setting up custom site watcher: %w", err)
 	}
 
 	for _, c := range controllers {
 		r := ControllerCRDReconciler{
-			Log:            ctrl.Log.WithName("controllers").WithName(c.gvk.Kind + "Controller"),
-			ControllerName: c.name,
-			GVK:            c.gvk,
-			ChildGVKs:      c.childrenGVKs,
+			Log:            ctrl.Log.WithName("controllers").WithName(c.mainType.Kind + "Controller"),
+			controllerInfo: c,
 		}
 		if err := r.SetupWithManager(mgr); err != nil {
-			return fmt.Errorf("setting up controller crd reconciler for Kind=%v: %w", c.gvk.Kind, err)
+			return fmt.Errorf("setting up controller crd reconciler for Kind=%v: %w", c.mainType.Kind, err)
 		}
 	}
 
 	return nil
 }
 
-type controllerNameGVK struct {
-	name         string
-	gvk          schema.GroupVersionKind
-	childrenGVKs []schema.GroupVersionKind
+type controllerInfo struct {
+	controllerName        string
+	mainType              schema.GroupVersionKind
+	dependentTypes        []schema.GroupVersionKind
+	supportedDependencies map[string]bool
 }
 
-func getParentChildrenGVKs(ctx context.Context, cl client.Client) ([]controllerNameGVK, error) {
+func supportedDependencyKey(gvk schema.GroupVersionKind) string {
+	return strings.ToLower(fmt.Sprintf("%s.%s.%s", gvk.Kind, gvk.Version, gvk.Group))
+}
+
+func getControllers(ctx context.Context, cl client.Client) ([]controllerInfo, error) {
 	var ctrlList apiv1.ControllerList
 	if err := cl.List(ctx, &ctrlList); err != nil {
 		return nil, fmt.Errorf("listing: %w", err)
 	}
 
-	var result []controllerNameGVK
+	var controllers []controllerInfo
 
 	for _, c := range ctrlList.Items {
-		var crd apiext.CustomResourceDefinition
-		if err := cl.Get(ctx, types.NamespacedName{Name: c.Spec.CRDName}, &crd); err != nil {
-			return nil, fmt.Errorf("getting crd: %w", err)
+		info := controllerInfo{
+			controllerName:        c.Name,
+			mainType:              schema.FromAPIVersionAndKind(c.Spec.For.APIVersion, c.Spec.For.Kind),
+			supportedDependencies: make(map[string]bool),
 		}
 
-		var children []schema.GroupVersionKind
-		for _, c := range c.Spec.Children {
-			children = append(children, schema.FromAPIVersionAndKind(c.APIVersion, c.Kind))
+		if err := resourceTypeExists(ctx, cl, info.mainType); err != nil {
+			return nil, fmt.Errorf("checking controller main resource type: %w", err)
 		}
 
-		result = append(result, controllerNameGVK{
-			name: c.Name,
-			gvk: schema.GroupVersionKind{
-				Group:   crd.Spec.Group,
-				Version: crd.Spec.Version,
-				Kind:    crd.Spec.Names.Kind,
-			},
-			childrenGVKs: children,
-		})
+		for _, c := range c.Spec.Dependencies {
+			gvk := schema.FromAPIVersionAndKind(c.APIVersion, c.Kind)
+			if err := resourceTypeExists(ctx, cl, gvk); err == nil {
+				info.supportedDependencies[supportedDependencyKey(gvk)] = true
+			}
+			info.dependentTypes = append(info.dependentTypes, gvk)
+		}
+
+		controllers = append(controllers, info)
 	}
 
-	return result, nil
+	return controllers, nil
+}
+
+// resourceTypeExists attempts to determine if a resource type exists on the API Server.
+// if nil is returned, the resource type exists, otherwise it MIGHT not.
+// TODO: Improve on this logic if possible.
+func resourceTypeExists(ctx context.Context, c client.Client, gvk schema.GroupVersionKind) error {
+	var list unstructured.UnstructuredList
+	list.SetGroupVersionKind(gvk)
+	err := c.List(context.Background(), &list)
+	if err == nil {
+		return nil
+	}
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	return err
 }

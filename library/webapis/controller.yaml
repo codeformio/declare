@@ -3,10 +3,15 @@ kind: Controller
 metadata:
   name: webapis
 spec:
-  crdName: webapis.apps.example.com
-  children:
+  for:
+    apiVersion: apps.example.com/v1
+    kind: WebAPI
+  dependencies:
   - apiVersion: apps/v1
     kind: Deployment
+  - apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    optional: true
   - apiVersion: autoscaling/v1
     kind: HorizontalPodAutoscaler
   - apiVersion: v1
@@ -30,9 +35,11 @@ spec:
 
         local readinessProbe = if std.objectHas(obj.spec, 'healthcheck') && std.objectHas(obj.spec.healthcheck, 'path') then {httpGet: { path: obj.spec.healthcheck.path, port: containerPort }} else {tcpSocket: { port: containerPort }},
 
-        local deployment = {
-          apiVersion: 'apps/v1',
-          kind: 'Deployment',
+        local useRollouts = std.objectHas(request.supported, 'rollout.v1alpha1.argoproj.io'),
+
+        local workload = {
+          apiVersion: if useRollouts then 'argoproj.io/v1alpha1' else 'apps/v1',
+          kind: if useRollouts then 'Rollout' else 'Deployment',
           metadata: {
             name: obj.metadata.name,
             labels: {
@@ -40,6 +47,22 @@ spec:
             }
           },
           spec: {
+            # TODO: Update strategy to be something more intelligent.
+            [if useRollouts then 'strategy']: {
+              canary: {
+                steps: [
+                  { setWeight: 20 },
+                  { pause: {} },
+                  { setWeight: 40 },
+                  { pause: {duration: 10} },
+                  { setWeight: 60 },
+                  { pause: {duration: 10} },
+                  { setWeight: 80 },
+                  { pause: {duration: 10} },
+                ],
+              },
+            },
+            revisionHistoryLimit: 2,
             selector: {
               matchLabels: {
                 app: obj.metadata.name,
@@ -78,8 +101,9 @@ spec:
             },
           },
         },
-        local currentDeployment = std.native("getObject")(deployment),
-        local currentReadyReplicas = if std.objectHas(currentDeployment, 'status') && std.objectHas(currentDeployment.status, 'readyReplicas') then currentDeployment.status.readyReplicas else 0,
+
+        local currentWorkload = std.native("getObject")(workload),
+        local currentReadyReplicas = if std.objectHas(currentWorkload, 'status') && std.objectHas(currentWorkload.status, 'readyReplicas') then currentWorkload.status.readyReplicas else 0,
 
         local service = {
           apiVersion: 'v1',
@@ -200,9 +224,9 @@ spec:
             minReplicas: minReplicas,
             maxReplicas: maxReplicas,
             scaleTargetRef: {
-              apiVersion: "apps/v1",
-              kind: "Deployment",
-              name: obj.metadata.name,
+              apiVersion: workload.apiVersion,
+              kind: workload.kind,
+              name: workload.metadata.name,
             },
             targetCPUUtilizationPercentage: 50,
           },
@@ -211,8 +235,8 @@ spec:
         local currentReplicas = if std.objectHas(currentHPA, 'status') && std.objectHas(currentHPA.status, 'currentReplicas') then currentHPA.status.currentReplicas else 0,
         local currentCPUUtilizationPercentage = if std.objectHas(currentHPA, 'status') && std.objectHas(currentHPA.status, 'currentCPUUtilizationPercentage') then currentHPA.status.currentCPUUtilizationPercentage else 0,
 
-        children: [
-          deployment,
+        apply: [
+          workload,
           hpa,
           service,
           netpol,

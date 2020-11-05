@@ -3,8 +3,10 @@ kind: Controller
 metadata:
   name: clusters
 spec:
-  crdName: clusters.k8s.example.com
-  children:
+  for:
+    apiVersion: k8s.example.com/v1
+    kind: Cluster
+  dependencies:
   - apiVersion: cluster.x-k8s.io/v1alpha3
     kind: Cluster
   - apiVersion: infrastructure.cluster.x-k8s.io/v1alpha3
@@ -229,7 +231,7 @@ spec:
           }
         },
 
-        children: [clu, awsClu, kAdmCtrl, ctrlMacTmpl, macDep, macTmpl, kAdmCfgTmpl]
+        apply: [clu, awsClu, kAdmCtrl, ctrlMacTmpl, macDep, macTmpl, kAdmCfgTmpl]
       }
   
   

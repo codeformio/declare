@@ -3,8 +3,10 @@ kind: Controller
 metadata:
   name: jsexamples
 spec:
-  crdName: jsexamples.javascript.example.com
-  children:
+  for:
+    apiVersion: javascript.example.com/v1
+    kind: JSExample
+  dependencies:
   - apiVersion: v1
     kind: Service
   source:
@@ -13,10 +15,10 @@ spec:
         var obj = request.object;
         var isExposed = hasDefinedPort(obj);
       
-        var children = [];
+        var toApply = [];
       
         if (isExposed) {
-          children.push({
+          toApply.push({
             apiVersion: 'v1',
             kind: 'Service',
             metadata: {
@@ -37,7 +39,7 @@ spec:
           })
         }
       
-        return { children: children };
+        return { apply: toApply };
       }
 
     utils.js: |

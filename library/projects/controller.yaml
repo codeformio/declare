@@ -3,8 +3,10 @@ kind: Controller
 metadata:
   name: projects
 spec:
-  crdName: projects.org.example.com
-  children:
+  for:
+    apiVersion: org.example.com/v1
+    kind: Project
+  dependencies:
   - apiVersion: v1
     kind: Namespace
   - apiVersion: v1
@@ -15,7 +17,7 @@ spec:
 
         local obj = request.object,
 
-        children: [] + ( std.flattenArrays([
+        apply: [] + ( std.flattenArrays([
           [
             {
               apiVersion: 'v1',

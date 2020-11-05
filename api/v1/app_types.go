@@ -25,16 +25,21 @@ type ControllerSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Source  map[string]string `json:"source,omitempty"`
-	CRDName string            `json:"crdName,omitempty"`
-	// Type of children this app produces.
-	Children []ChildType    `json:"children,omitempty"`
-	Config   []ConfigSource `json:"config,omitempty"`
+	Source       map[string]string `json:"source,omitempty"`
+	For          ResourceType      `json:"for,omitempty"`
+	Dependencies []Dependency      `json:"dependencies,omitempty"`
+	Config       []ConfigSource    `json:"config,omitempty"`
 }
 
-type ChildType struct {
+type ResourceType struct {
 	APIVersion string `json:"apiVersion,omitempty"`
 	Kind       string `json:"kind,omitempty"`
+}
+
+type Dependency struct {
+	APIVersion string `json:"apiVersion,omitempty"`
+	Kind       string `json:"kind,omitempty"`
+	Optional   bool   `json:"optional,omitempty"`
 }
 
 type ConfigSource struct {
