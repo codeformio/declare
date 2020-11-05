@@ -41,7 +41,7 @@ const source = `
 function(request) {
   local obj = request.object,
   local isExposed = std.objectHas(obj.spec, 'port') && obj.spec.port > 0,
-  children:
+  apply:
   (
     if isExposed then [
       {

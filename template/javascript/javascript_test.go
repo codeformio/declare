@@ -43,10 +43,10 @@ function sync(request) {
   var obj = request.object;
   var isExposed = hasDefinedPort(obj);
 
-  var children = [];
+  var toApply = [];
 
   if (isExposed) {
-    children.push({
+    toApply.push({
       apiVersion: 'v1',
       kind: 'Service',
       metadata: {
@@ -67,7 +67,7 @@ function sync(request) {
     })
   }
 
-  return { children: children };
+  return { apply: toApply };
 }
 `
 
