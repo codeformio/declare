@@ -7,7 +7,7 @@ require (
 	github.com/google/go-jsonnet v0.16.0
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
-	github.com/prometheus/common v0.4.1
+	github.com/prometheus/common v0.4.1 // indirect
 	github.com/robertkrimen/otto v0.0.0-20200922221731-ef014fd054ac
 	github.com/stretchr/testify v1.4.0
 	google.golang.org/appengine v1.6.1 // indirect
