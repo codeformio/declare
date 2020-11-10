@@ -33,7 +33,7 @@ spec:
   - app: "client-b"
 ```
 
-See [WebAPI quickstart guide](./library/webapis/).
+See [WebService docs](./library/webservices/).
 
 ### Project
 
