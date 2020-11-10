@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 
-kind create cluster --name declare.dev --config ./config/kind/kind.yaml
+set -e
 
-# Install CNI.
-sh ./config/kind/calico.sh
+export INSTANCE=full
 
-# Install metrics server to enable HPAs.
-kustomize build ./hack/metrics-server/ | kubectl apply -f -
-
-# Install ArgoCD Rollouts (used for some library/ instances).
-kubectl create namespace argo-rollouts
-kubectl apply -n argo-rollouts -f https://raw.githubusercontent.com/argoproj/argo-rollouts/stable/manifests/install.yaml
+cd ./e2e-test/cluster-instances/$INSTANCE
+kind create cluster --name declare-$INSTANCE --config kind.yaml || echo "cluster already exists"
+kustomize build ./01/ | kubectl apply -f -
+kustomize build ./02/ | kubectl apply -f -
 
 # Install controller CRD, etc.
+cd -
 make install
+

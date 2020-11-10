@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/codeformio/declare/template"
 	templatefactory "github.com/codeformio/declare/template/factory"
@@ -150,6 +151,7 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		return ctrl.Result{}, nil
 	}
 
+	var applyFailed bool
 	for _, obj := range res.Apply {
 		log := log.WithValues("kind", obj.GetKind())
 		publishFailure := func(err error) {
@@ -205,7 +207,8 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 			apply.Stdin = &stdin
 			apply.Stderr = &stderr
 			if err := apply.Run(); err != nil {
-				publishFailure(fmt.Errorf("patching (kubectl apply): %w: %v", err, stderr.String()))
+				publishFailure(fmt.Errorf("applying (kubectl apply): %w: %v", err, stderr.String()))
+				applyFailed = true
 				continue
 			}
 		}
@@ -215,7 +218,7 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		/*
 			if err := r.client.Patch(ctx, obj, client.Apply, client.ForceOwnership, client.FieldOwner(r.name())); err != nil {
 				// problem, _ := json.Marshal(obj)
-				return ctrl.Result{}, fmt.Errorf("patching (server-side apply): %w", err)
+				return ctrl.Result{}, fmt.Errorf("applying (server-side apply): %w", err)
 			}
 		*/
 
@@ -230,6 +233,9 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 
 	// TODO: Account for garbage collection of conditional resources.
 
+	if applyFailed {
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
 	return ctrl.Result{}, nil
 }
 

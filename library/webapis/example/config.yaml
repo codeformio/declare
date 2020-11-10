@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: webapis
-data:
-  minReplicas: "3"
-  maxReplicas: "15"

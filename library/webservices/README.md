@@ -1,43 +1,53 @@
-# WebAPIs
+# Web Services
 
-A developer-focused abstraction for web APIs.
+A developer-focused abstraction for web-based services.
 
 ## Quickstart
 
 (Assumes you have Declare running in your cluster.)
 
-Install the WebAPI Controller.
+Install the WebService Controller.
 
 ```sh
-kubectl apply -k ./library/webapis
+kubectl apply -k ./library/webservices
 ```
 
-Install an instance of a WebAPI.
+Install an instance of a WebService.
 
 ```sh
-kubectl apply -f ./library/webapis/example/hello-api.yaml
+kubectl apply -f ./library/webservices/example/hello-api.yaml
 ```
 
-Query the status of the WebAPI. Note that the status of the underlying resources gets summarized here, maintaining a full abstraction.
+Query the status of the WebService. Note that the status of the underlying resources gets summarized here, maintaining a full abstraction.
 
 ```sh
-kubectl get webapis
+kubectl get webservices
 ```
 
 Information about the creation of child resources and any errors in the Controller logic will be exposed as events which can be inspected:
 
 ```sh
-kubectl describe webapis
+kubectl describe webservices
 ```
 
 ### Child Resources
 
-#### Deployment
+#### Workload
 
-A Deployment should be created matching the name of the WebAPI.
+##### A. Deployment
+
+A Deployment is the default type of workload object that a WebService produces.
 
 ```sh
 kubectl describe deployment hello
+```
+
+##### B. Rollout
+
+A Rollout will be created in place of a Deployment if [Argo Rollouts](https://argoproj.github.io/argo-rollouts/) are installed on the cluster. This allows for canary rollout strategies.
+
+```sh
+kubectl describe rollout hello
 ```
 
 #### Horizontal Pod Autoscaler
@@ -54,7 +64,7 @@ The HPA can take a long time to start adjusting pod counts.
 
 #### Service
 
-A Service should be created matching the name of the WebAPI.
+A Service should be created matching the name of the WebService.
 
 ```sh
 kubectl describe service hello
@@ -64,7 +74,7 @@ kubectl describe service hello
 
 *NOTE: Currently only the official k8s NGINX ingress controller is supported.*
 
-An Ingress should be created matching the name of the WebAPI (if `.spec.public = true`).
+An Ingress should be created matching the name of the WebService (if `.spec.public = true`).
 
 ```sh
 kubectl describe ingress hello
@@ -92,7 +102,7 @@ kubectl run busybox -l 'app=some-unknown-client' -i --image=busybox --restart=Ne
 
 ## Config
 
-The WebAPI Controller can be configured using the following variables:
+The WebService Controller can be configured using the following variables:
 
 ```yaml
   minRelicas: "1"

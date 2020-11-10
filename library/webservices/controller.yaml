@@ -1,0 +1,327 @@
+apiVersion: ctrl.declare.dev/v1
+kind: Controller
+metadata:
+  name: webservices
+spec:
+  for:
+    apiVersion: apps.codeform.io/v1alpha1
+    kind: WebService
+  dependencies:
+  - apiVersion: apps/v1
+    kind: Deployment
+  - apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    optional: true
+  - apiVersion: argoproj.io/v1alpha1
+    kind: AnalysisTemplate
+    optional: true
+  - apiVersion: autoscaling/v1
+    kind: HorizontalPodAutoscaler
+  - apiVersion: v1
+    kind: Service
+  - apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+  - apiVersion: networking.k8s.io/v1beta1
+    kind: Ingress
+  config:
+  - configMap: webservices
+  source:
+    controller.jsonnet: |
+      function(request) {
+        local obj = request.object,
+        local cfg = request.config,
+
+        local isExposed = std.objectHas(obj.spec, 'expose') && std.objectHas(obj.spec.expose, 'host'),
+        local argoRolloutsInstalled = (std.objectHas(request.supported, 'rollout.v1alpha1.argoproj.io') && std.objectHas(request.supported, 'analysistemplate.v1alpha1.argoproj.io')),
+
+        local service = {
+          apiVersion: 'v1',
+          kind: 'Service',
+          metadata: {
+            name: obj.metadata.name,
+          },
+          spec: {
+            selector: {
+              app: obj.metadata.name,
+            },
+            ports: [
+              {
+                targetPort: 'app',
+                # Clients should use standardized port.
+                port: 80,
+                protocol: 'TCP',
+              },
+            ],
+          },
+        },
+
+        local serviceCanary = {
+          apiVersion: 'v1',
+          kind: 'Service',
+          metadata: {
+            name: obj.metadata.name + "-canary",
+          },
+          spec: {
+            selector: {
+              app: obj.metadata.name,
+            },
+            ports: [
+              {
+                targetPort: 'app',
+                # Clients should use standardized port.
+                port: 80,
+                protocol: 'TCP',
+              },
+            ],
+          },
+        },
+
+        local ingress = {
+           apiVersion: "networking.k8s.io/v1beta1",
+           kind: "Ingress",
+           metadata: {
+              name: obj.metadata.name,
+              annotations: {
+                #"nginx.ingress.kubernetes.io/rewrite-target": "/",
+                "kubernetes.io/ingress.class": "nginx",
+              },
+           },
+           spec: {
+              rules: [
+                 {
+                   # TODO: Change hardcoded hostname.
+                   host: if isExposed then obj.spec.expose.host else '',
+                   http: {
+                      paths: [
+                         {
+                            path: if std.objectHas(obj.spec, 'expose') && std.objectHas(obj.spec.expose, 'path') then obj.spec.expose.path else '/',
+                            pathType: "Prefix",
+                            backend: {
+                               serviceName: obj.metadata.name,
+                               servicePort: "app",
+                            },
+                         },
+                      ]
+                   },
+                 },
+              ],
+           },
+        },
+
+        local analysis = {
+          apiVersion: "argoproj.io/v1alpha1",
+          kind: "AnalysisTemplate",
+          metadata: {
+            name: "success-rate",
+          },
+          spec: {
+            args: [
+              {name: "ingress"},
+              {name: "namespace"},
+            ],
+            metrics: [
+              {
+                name: "success-rate",
+                interval: "1m",
+                # NOTE: prometheus queries return results in the form of a vector.
+                # So it is common to access the index 0 of the returned array to obtain the value
+                successCondition: "result[0] >= 0.95",
+                failureLimit: 3,
+                provider: {
+                  prometheus: {
+                    address: if std.objectHas(cfg, 'prometheusAddress') then cfg.prometheusAddress else 'http://prometheus-server.ingress-nginx.svc.cluster.local:9090',
+                    query: |||
+                      sum(rate(
+                        nginx_ingress_controller_requests{namespace=~"{{args.namespace}}",ingress=~"{{args.ingress}}",status!~"[4-5].*"}[5m]
+                      )) / 
+                      sum(rate(
+                        nginx_ingress_controller_requests{namespace=~"{{args.namespace}}",ingress=~"{{args.ingress}}"}[5m]
+                      ))
+                    |||
+                  },
+                },
+              },
+            ],
+          },
+        },
+
+        local workload = {
+          apiVersion: if argoRolloutsInstalled then 'argoproj.io/v1alpha1' else 'apps/v1',
+          kind: if argoRolloutsInstalled then 'Rollout' else 'Deployment',
+          metadata: {
+            name: obj.metadata.name,
+            labels: {
+              app: obj.metadata.name,
+            }
+          },
+          spec: {
+            # TODO: Update strategy to be something more intelligent.
+            [if argoRolloutsInstalled then 'strategy']: {
+              canary: {
+                canaryService: serviceCanary.metadata.name,
+                stableService: service.metadata.name,
+                [if isExposed then 'trafficRouting']: {
+                  nginx: {
+                    stableIngress: ingress.metadata.name,
+                  },
+                },
+
+                local interval = if std.objectHas(cfg, 'rolloutInterval') then cfg.rolloutInterval else '10m',
+                steps: [
+                  { setWeight: 5 },
+                  { pause: {duration: interval} }, # TODO: Add a manual approval step? # { pause: {} },
+                  { setWeight: 10 },
+                  { pause: {duration: interval} }, # TODO: Add a manual approval step? # { pause: {} },
+                  { setWeight: 20 },
+                  { pause: {duration: interval} },
+                  { setWeight: 40 },
+                  { pause: {duration: interval} },
+                  { setWeight: 80 },
+                  { pause: {duration: interval} },
+                ],
+
+                [if isExposed then 'analysis']: {
+                  templates: [ { templateName: analysis.metadata.name } ],
+                  startingStep: 2,
+                  args: [ { name: "ingress", value: ingress.metadata.name }, { name: "namespace", value: obj.metadata.namespace } ],
+                },
+              },
+            },
+            revisionHistoryLimit: 2,
+            selector: {
+              matchLabels: {
+                app: obj.metadata.name,
+              },
+            },
+            template: {
+              metadata: {
+                labels: {
+                  app: obj.metadata.name,
+                },
+              },
+              spec: {
+                containers: [
+                  {
+                    local containerPort = if std.objectHas(obj.spec, 'port') && obj.spec.port != 0 then obj.spec.port else 8080,
+                    local readinessProbe = if std.objectHas(obj.spec, 'healthcheck') && std.objectHas(obj.spec.healthcheck, 'path') then {httpGet: { path: obj.spec.healthcheck.path, port: containerPort }} else {tcpSocket: { port: containerPort }},
+
+                    name: 'app',
+                    image: obj.spec.image,
+                    ports: [
+                      {
+                        name: 'app',
+                        containerPort: containerPort,
+                        protocol: 'TCP',
+                      },
+                    ],
+                    readinessProbe: readinessProbe,
+                    resources: {
+                      requests: {
+                        cpu: if std.objectHas(obj.spec, 'resources') && std.objectHas(obj.spec.resources, 'min') && std.objectHas(obj.spec.resources.min, 'cpu') then obj.spec.resources.min.cpu else "200m",
+                      },
+                      limits: {
+                        cpu: if std.objectHas(obj.spec, 'resources') && std.objectHas(obj.spec.resources, 'max') && std.objectHas(obj.spec.resources.max, 'cpu') then obj.spec.resources.max.cpu else "500m",
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+
+        local hpa = {
+          apiVersion: "autoscaling/v1",
+          kind: "HorizontalPodAutoscaler",
+          metadata: {
+            name: obj.metadata.name,
+          },
+          spec: {
+            minReplicas: if std.objectHas(cfg, 'minReplicas') then std.parseInt(cfg.minReplicas) else 1,
+            maxReplicas: if std.objectHas(cfg, 'maxReplicas') then std.parseInt(cfg.maxReplicas) else 10,
+            scaleTargetRef: {
+              apiVersion: workload.apiVersion,
+              kind: workload.kind,
+              name: workload.metadata.name,
+            },
+            targetCPUUtilizationPercentage: 50,
+          },
+        },
+
+        local netpol = {
+           apiVersion: 'networking.k8s.io/v1',
+           kind: 'NetworkPolicy',
+           metadata: {
+              name: obj.metadata.name,
+           },
+           spec: {
+             local npPorts = [
+                {
+                   protocol: 'TCP',
+                   port: obj.spec.port
+                }
+             ],
+
+              podSelector: {
+                 matchLabels: {
+                    app: obj.metadata.name,
+                 }
+              },
+              policyTypes: [
+                 'Ingress',
+              ],
+              ingress: [
+                 {
+                    from: [
+                       {
+                          podSelector: {
+                             matchLabels: {
+                                app: c.app,
+                             }
+                          },
+                          namespaceSelector: {},
+                       }
+                    ],
+                    ports: npPorts,
+                 }
+                 for c in obj.spec.allowedClients
+              ] + (if isExposed then [{
+                from: [
+                  {
+                    # Allow ingress from ingress controller.
+                    # TODO: Account for more ingress controllers.
+                    namespaceSelector: {
+                      matchLabels: {
+                        "app.kubernetes.io/name": "ingress-nginx",
+                      }
+                    }
+                  }
+                ],
+                ports: npPorts,
+              }] else []),
+           },
+        },
+
+        apply: [
+          service,
+        ] + (if isExposed then [ingress] else []) + (if argoRolloutsInstalled then [analysis, serviceCanary] else []) + [
+          netpol,
+          workload,
+          hpa,
+        ],
+
+        status: {
+          local currentWorkload = std.native("getObject")(workload),
+          local currentReadyReplicas = if std.objectHas(currentWorkload, 'status') && std.objectHas(currentWorkload.status, 'readyReplicas') then currentWorkload.status.readyReplicas else 0,
+          local currentHPA = std.native("getObject")(hpa),
+          local currentReplicas = if std.objectHas(currentHPA, 'status') && std.objectHas(currentHPA.status, 'currentReplicas') then currentHPA.status.currentReplicas else 0,
+          local currentCPUUtilizationPercentage = if std.objectHas(currentHPA, 'status') && std.objectHas(currentHPA.status, 'currentCPUUtilizationPercentage') then currentHPA.status.currentCPUUtilizationPercentage else 0,
+
+          replicas: currentReplicas,
+          healthy: (currentReadyReplicas > 0),
+          cpuUtilizationPercentage: currentCPUUtilizationPercentage,
+          currentRolloutStrategy: if argoRolloutsInstalled then 'Canary' else 'Rolling',
+        },
+      }
+  
+  

@@ -1,11 +1,13 @@
-apiVersion: apps.example.com/v1
-kind: WebAPI
+apiVersion: apps.codeform.io/v1alpha1
+kind: WebService
 metadata:
   name: hello
 spec:
-  image: "k8s.gcr.io/hpa-example" # "nginx:1.14.2"
+  image: "docker.io/kennethreitz/httpbin"
+  # image: "k8s.gcr.io/hpa-example" # "nginx:1.14.2"
   port: 80
-  public: true
+  expose:
+    host: hello.example.com
   allowedClients:
   - app: "some-allowed-client"
   - app: "some-other-client"

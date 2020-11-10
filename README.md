@@ -16,13 +16,13 @@ kustomize build ./config/default | kubectl apply -f -
 
 ## Library
 
-### WebAPI
+### WebService
 
-A WebAPI allows app teams to easily deploy their application without much Kubernetes knowledge.
+A WebService allows app teams to deploy web based services. This abstraction helps enforce best practices while implementing advanced features like autoscaling and canary rollouts.
 
 ```yaml
-apiVersion: apps.example.com/v1
-kind: WebAPI
+apiVersion: apps.codeform.io/v1alpha1
+kind: WebService
 metadata:
   name: hello
 spec:

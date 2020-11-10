@@ -2,13 +2,13 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   # name must match the spec fields below, and be in the form: <plural>.<group>
-  name: webapis.apps.example.com
+  name: webservices.apps.codeform.io
 spec:
   # group name to use for REST API: /apis/<group>/<version>
-  group: apps.example.com
+  group: apps.codeform.io
   # list of versions supported by this CustomResourceDefinition
   versions:
-    - name: v1
+    - name: v1alpha1
       # Each version can be enabled/disabled by Served flag.
       served: true
       # One and only one version must be marked as the storage version.
@@ -36,6 +36,8 @@ spec:
                   type: boolean
                 cpuUtilizationPercentage:
                   type: integer
+                currentRolloutStrategy:
+                  type: string
             spec:
               type: object
               properties:
@@ -43,8 +45,13 @@ spec:
                   type: integer
                 image:
                   type: string
-                public:
-                  type: boolean
+                expose:
+                  type: object
+                  properties:
+                    host:
+                      type: string
+                    path:
+                      type: string
                 allowedClients:
                   type: array
                   items:
@@ -74,12 +81,12 @@ spec:
   scope: Namespaced
   names:
     # plural name to be used in the URL: /apis/<group>/<version>/<plural>
-    plural: webapis
+    plural: webservices
     # singular name to be used as an alias on the CLI and for display
-    singular: webapi
+    singular: webservice
     # kind is normally the CamelCased singular type. Your resource manifests use this.
-    kind: WebAPI
+    kind: WebService
     # shortNames allow shorter string to match your resource on the CLI
     shortNames:
-    - wa
+    - ws
     - web
