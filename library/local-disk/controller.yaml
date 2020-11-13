@@ -1,0 +1,70 @@
+apiVersion: ctrl.declare.dev/v1
+kind: Controller
+metadata:
+  name: local-pvc
+spec:
+  for:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+  dependencies:
+  - apiVersion: v1
+    kind: PersistentVolume
+  source:
+    controller.js: |
+      function sync(request) {
+
+        var obj = request.object;
+        var cfg = request.config;
+
+        var rootPath = cfg.rootPath || '/tmp';
+        var nodeKey = cfg.nodeKey || 'kubernetes.io/os';
+        var nodeValues = cfg.nodeValues || ['linux'];
+
+        var pv = {
+          "apiVersion": "v1",
+          "kind": "PersistentVolume",
+          "metadata": {
+            "name": obj.metadata.namespace + "-" + obj.metadata.name,
+          },
+          "spec": {
+            "accessModes": [
+              "ReadWriteMany"
+            ],
+            "capacity": {
+              "storage": obj.spec.resources.requests.storage,
+            },
+            "local": {
+              "path": rootPath,
+            },
+            "nodeAffinity": {
+              "required": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": nodeKey,
+                        "operator": "In",
+                        "values": nodeValues,
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "storageClassName": "local-storage",
+            "volumeMode": "Filesystem"
+          }
+        };
+
+        var result = {
+          apply: []
+        };
+
+        if (obj.spec.storageClassName == 'localdisk') {
+          result.apply.push(pv);
+        }
+
+        return result;
+      }
+  
+  

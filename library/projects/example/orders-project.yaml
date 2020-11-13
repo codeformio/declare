@@ -1,8 +1,9 @@
-apiVersion: org.example.com/v1
+apiVersion: org.codeform.io/v1
 kind: Project
 metadata:
   name: orders
 spec:
+  repo: https://github.com/codeformio/k8s-orders-app.git
   environments:
   - dev
   - stg
@@ -14,9 +15,7 @@ spec:
     - group: orders-admins-us
     - group: orders-admins-apj
   resources:
-    envTotals:
-      requests: { cpu: "1", memory: "2", pods: "100" }
-      limits:   { cpu: "1", memory: "2", pods: "100" }
+    envQuotas: { cpu: "1", memory: "2", pods: "100" }
     podDefaults:
       requests: { cpu: "1",  memory: "2"  }
       limits:   { cpu: "10", memory: "20" }

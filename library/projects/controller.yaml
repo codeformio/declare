@@ -11,11 +11,18 @@ spec:
     kind: Namespace
   - apiVersion: v1
     kind: ResourceQuota
+  - apiVersion: argoproj.io/v1alpha1
+    kind: Application
+    optional: true
   source:
     controller.jsonnet: |
       function(request) {
 
         local obj = request.object,
+        local cfg = request.config,
+
+        local argoCDInstalled = std.objectHas(request.supported, 'application.v1alpha1.argoproj.io'),
+        local gitopsPathPrefix = if std.objectHas(cfg, 'gitopsPathPrefix') then cfg.gitopsPathPrefix else '',
 
         apply: [] + ( std.flattenArrays([
           [
@@ -24,7 +31,11 @@ spec:
               kind: 'Namespace',
               metadata: {
                 name: obj.metadata.name + '-' + e,
-              }
+                labels: {
+                  project: obj.metadata.name,
+                  env: e,
+                },
+              },
             },
             {
               apiVersion: 'v1',
@@ -35,13 +46,46 @@ spec:
               },
               spec: {
                 hard: {
-                  cpu: obj.spec.quota.cpu,
-                  memory: obj.spec.quota.memory,
-                  pods: obj.spec.quota.pods
+                  cpu: obj.spec.resources.envQuotas.cpu,
+                  memory: obj.spec.resources.envQuotas.memory,
+                  pods: obj.spec.resources.envQuotas.pods
                 }
               }
             },
-          ] for e in obj.spec.environments ])
+          ] + (if argoCDInstalled then [{
+            apiVersion: 'argoproj.io/v1alpha1',
+            kind: 'Application',
+            metadata: {
+              name: obj.metadata.name + '-' + e,
+              namespace: 'argocd',
+            },
+            spec: {
+              destination: {
+                namespace: obj.metadata.name + '-' + e,
+                server: 'https://kubernetes.default.svc',
+              },
+              project: 'default',
+              retry: {
+                backoff: {
+                  duration: '5s',
+                  factor: 2,
+                  maxDuration: '3m',
+                },
+                limit: 5,
+              },
+              source: {
+                path: gitopsPathPrefix + e,
+                repoURL: obj.spec.gitops.repo,
+                targetRevision: e,
+              },
+              syncPolicy: {
+                automated: {
+                  prune: true,
+                  selfHeal: true,
+                },
+              },
+            },
+          }] else []) for e in obj.spec.environments ])
         )
       }
   
