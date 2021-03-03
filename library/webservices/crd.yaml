@@ -23,6 +23,8 @@ spec:
         - name: CPU (%)
           jsonPath: .status.cpuUtilizationPercentage
           type: integer
+      subresources:
+        status: {}
       schema:
         openAPIV3Schema:
           type: object
@@ -30,6 +32,10 @@ spec:
             status:
               type: object
               properties:
+                currentSpecSHA:
+                  type: integer
+                currentSHA:
+                  type: integer
                 replicas:
                   type: integer
                 healthy:

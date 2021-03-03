@@ -9,6 +9,7 @@ require (
 	github.com/onsi/gomega v1.10.1
 	github.com/robertkrimen/otto v0.0.0-20200922221731-ef014fd054ac
 	github.com/stretchr/testify v1.4.0
+	go.uber.org/zap v1.10.0 // indirect
 	google.golang.org/appengine v1.6.1 // indirect
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	k8s.io/api v0.18.6

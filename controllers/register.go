@@ -50,9 +50,10 @@ type controllerInfo struct {
 	mainType              schema.GroupVersionKind
 	dependentTypes        []schema.GroupVersionKind
 	supportedDependencies map[string]bool
+	watchedDependencies   map[string]bool
 }
 
-func supportedDependencyKey(gvk schema.GroupVersionKind) string {
+func gvkString(gvk schema.GroupVersionKind) string {
 	return strings.ToLower(fmt.Sprintf("%s.%s.%s", gvk.Kind, gvk.Version, gvk.Group))
 }
 
@@ -69,6 +70,7 @@ func getControllers(ctx context.Context, cl client.Client) ([]controllerInfo, er
 			controllerName:        c.Name,
 			mainType:              schema.FromAPIVersionAndKind(c.Spec.For.APIVersion, c.Spec.For.Kind),
 			supportedDependencies: make(map[string]bool),
+			watchedDependencies:   make(map[string]bool),
 		}
 
 		if err := resourceTypeExists(ctx, cl, info.mainType); err != nil {
@@ -78,8 +80,9 @@ func getControllers(ctx context.Context, cl client.Client) ([]controllerInfo, er
 		for _, c := range c.Spec.Dependencies {
 			gvk := schema.FromAPIVersionAndKind(c.APIVersion, c.Kind)
 			if err := resourceTypeExists(ctx, cl, gvk); err == nil {
-				info.supportedDependencies[supportedDependencyKey(gvk)] = true
+				info.supportedDependencies[gvkString(gvk)] = true
 			}
+			info.watchedDependencies[gvkString(gvk)] = c.Watch
 			info.dependentTypes = append(info.dependentTypes, gvk)
 		}
 

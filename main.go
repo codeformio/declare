@@ -21,6 +21,7 @@ import (
 	"flag"
 	"os"
 
+	"go.uber.org/zap/zapcore"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -70,9 +71,9 @@ func main() {
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
 		Port:               9443,
-		//	Logger:             zap.New(zap.Level(zapcore.DebugLevel), zap.UseDevMode(true)),
-		LeaderElection:   enableLeaderElection,
-		LeaderElectionID: "d26717b8.declare.dev",
+		Logger:             zap.New(zap.Level(zapcore.DebugLevel), zap.UseDevMode(true)),
+		LeaderElection:     enableLeaderElection,
+		LeaderElectionID:   "d26717b8.declare.dev",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

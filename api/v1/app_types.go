@@ -40,6 +40,8 @@ type Dependency struct {
 	APIVersion string `json:"apiVersion,omitempty"`
 	Kind       string `json:"kind,omitempty"`
 	Optional   bool   `json:"optional,omitempty"`
+	// Watch the dependency for changes.
+	Watch bool `json:"watch,omitempty"`
 }
 
 type ConfigSource struct {

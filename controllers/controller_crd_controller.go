@@ -1,10 +1,8 @@
 package controllers
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -12,6 +10,7 @@ import (
 	templatefactory "github.com/codeformio/declare/template/factory"
 
 	apiv1 "github.com/codeformio/declare/api/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -20,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -103,6 +101,7 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				}
 				continue
 			}
+			// TODO: Check if already owner.
 			if err := controllerutil.SetOwnerReference(&c, &s, r.scheme); err != nil {
 				return ctrl.Result{}, fmt.Errorf("setting owner reference on secret: %w", err)
 			}
@@ -125,6 +124,7 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				}
 				continue
 			}
+			// TODO: Check if already owner.
 			if err := controllerutil.SetOwnerReference(&c, &cm, r.scheme); err != nil {
 				return ctrl.Result{}, fmt.Errorf("setting owner reference on configmap: %w", err)
 			}
@@ -193,42 +193,44 @@ func (r *ControllerCRDReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 
 		log.Info("Applying", "name", obj.GetName(), "namespace", obj.GetNamespace(), "gvk", obj.GroupVersionKind())
 
-		{ // TODO: Remove kubectl exec here once server-side apply works for all CRDs.
-
-			// NOTE: Server-side apply fails via kubectl as well as via the Go pkg call below.
-			// kubectl apply --force-conflicts=true --server-side
-
-			apply := exec.Command("kubectl", "apply", "--overwrite=true", "-f", "-")
-			var stdin, stderr bytes.Buffer
-			if err := json.NewEncoder(&stdin).Encode(obj); err != nil {
-				publishFailure(fmt.Errorf("encoding: %w", err))
-				continue
-			}
-			apply.Stdin = &stdin
-			apply.Stderr = &stderr
-			if err := apply.Run(); err != nil {
-				publishFailure(fmt.Errorf("applying (kubectl apply): %w: %v", err, stderr.String()))
-				applyFailed = true
-				continue
-			}
-		}
-
-		// TODO: Once server-side apply works, start using it over kubectl
-		// This currently fails for CAPI CRDs (MachineDeloyment .spec.replicas)
 		/*
-			if err := r.client.Patch(ctx, obj, client.Apply, client.ForceOwnership, client.FieldOwner(r.name())); err != nil {
-				// problem, _ := json.Marshal(obj)
-				return ctrl.Result{}, fmt.Errorf("applying (server-side apply): %w", err)
-			}
+			{ // OPTIONAL: Use kubectl apply if issues arise with server-side apply below.
+
+					// NOTE: Server-side apply fails via kubectl as well as via the Go pkg call below.
+					// kubectl apply --force-conflicts=true --server-side
+
+					apply := exec.Command("kubectl", "apply", "--overwrite=true", "-f", "-")
+					var stdin, stderr bytes.Buffer
+					if err := json.NewEncoder(&stdin).Encode(obj); err != nil {
+						publishFailure(fmt.Errorf("encoding: %w", err))
+						continue
+					}
+					apply.Stdin = &stdin
+					apply.Stderr = &stderr
+					if err := apply.Run(); err != nil {
+						publishFailure(fmt.Errorf("applying (kubectl apply): %w: %v", err, stderr.String()))
+						applyFailed = true
+						continue
+					}
+				}
 		*/
+
+		// Server-side apply
+		// NOTE: This was failing for CAPI CRDs (MachineDeloyment .spec.replicas). Need to retest.
+		if err := r.client.Patch(ctx, obj, client.Apply, client.ForceOwnership, client.FieldOwner(r.name())); err != nil {
+			// problem, _ := json.Marshal(obj)
+			return ctrl.Result{}, fmt.Errorf("applying (server-side apply): %w", err)
+		}
 
 		r.recorder.Eventf(&main, corev1.EventTypeNormal, EventReasonApplied, "Successfully applied object %s: %s", obj.GetKind(), obj.GetName())
 		log.Info("Applied object")
 	}
 
-	main.Object["status"] = res.Status
-	if err := r.client.Update(ctx, &main); err != nil {
-		return ctrl.Result{}, fmt.Errorf("updating main status: %v", err)
+	if res.Status != nil {
+		main.Object["status"] = res.Status
+		if err := r.client.Status().Update(ctx, &main); err != nil {
+			return ctrl.Result{}, fmt.Errorf("updating main status: %v", err)
+		}
 	}
 
 	// TODO: Account for garbage collection of conditional resources.
@@ -267,9 +269,13 @@ func (r *ControllerCRDReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Named(r.name()).
 		For(main)
 
-	// Watch all dependents.
+	// Watch dependents.
 	for _, gvk := range r.dependentTypes {
-		if !r.supportedDependencies[supportedDependencyKey(gvk)] {
+		if !r.watchedDependencies[gvkString(gvk)] {
+			continue
+		}
+
+		if !r.supportedDependencies[gvkString(gvk)] {
 			r.Log.Info("Skipping watch for unsupported dependent", "gvk", gvk.String())
 			continue
 		}
@@ -345,4 +351,13 @@ func (r *ControllerCRDReconciler) listInstancesToReconcile() []reconcile.Request
 	}
 
 	return requests
+}
+
+// TODO
+func isOwner(obj metav1.Object) bool {
+	refs := obj.GetOwnerReferences()
+	for _, ref := range refs {
+		_ = ref
+	}
+	return false
 }

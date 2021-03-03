@@ -9,14 +9,17 @@ spec:
   dependencies:
   - apiVersion: apps/v1
     kind: Deployment
+    watch: true
   - apiVersion: argoproj.io/v1alpha1
     kind: Rollout
     optional: true
+    watch: true
   - apiVersion: argoproj.io/v1alpha1
     kind: AnalysisTemplate
     optional: true
   - apiVersion: autoscaling/v1
     kind: HorizontalPodAutoscaler
+    watch: true
   - apiVersion: v1
     kind: Service
   - apiVersion: networking.k8s.io/v1

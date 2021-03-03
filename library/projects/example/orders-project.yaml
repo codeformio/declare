@@ -7,17 +7,18 @@ spec:
   - dev
   - stg
   - feature-a
-  access:
-    view:
-    - group: orders-devs
-    edit:
-    - group: orders-admins-us
-    - group: orders-admins-apj
-  resources:
-    envTotals:
-      requests: { cpu: "1", memory: "2", pods: "100" }
-      limits:   { cpu: "1", memory: "2", pods: "100" }
-    podDefaults:
-      requests: { cpu: "1",  memory: "2"  }
-      limits:   { cpu: "10", memory: "20" }
+  quota: { cpu: "1", memory: "2", pods: "100" }
+#  access:
+#    view:
+#    - group: orders-devs
+#    edit:
+#    - group: orders-admins-us
+#    - group: orders-admins-apj
+#  resources:
+#    envTotals:
+#      requests: { cpu: "1", memory: "2", pods: "100" }
+#      limits:   { cpu: "1", memory: "2", pods: "100" }
+#    podDefaults:
+#      requests: { cpu: "1",  memory: "2"  }
+#      limits:   { cpu: "10", memory: "20" }
 
